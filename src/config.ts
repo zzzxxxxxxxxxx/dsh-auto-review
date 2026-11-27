@@ -6,6 +6,7 @@
  */
 
 import z from '@deepseek-ai/schemastery'
+import { DEFAULT_IMAGES, type ImagesConfig } from './images.ts'
 import type { UiLanguage } from './messages.ts'
 
 /**
@@ -291,6 +292,8 @@ export interface Config {
   denyGuidance?: string
   /** Compact transcript budget for the reviewer prompt (see {@link ContextBudgetConfig}). */
   contextBudget?: Partial<ContextBudgetConfig>
+  /** Which user-attached images may travel to the reviewer as visual evidence (see {@link ImagesConfig}). */
+  images?: Partial<ImagesConfig>
   /** Verdict risk-level constraints (see {@link RiskPolicyConfig}). */
   riskPolicy?: Partial<RiskPolicyConfig>
   /** The rejection circuit breaker (see {@link CircuitBreakerConfig}). */
@@ -348,6 +351,8 @@ export interface ResolvedConfig {
   readonly reviewerPolicyText: string | undefined
   readonly denyGuidance: string
   readonly contextBudget: ContextBudgetConfig
+  /** Which user-attached images may travel to the reviewer as visual evidence. */
+  readonly images: ImagesConfig
   readonly riskPolicy: RiskPolicyConfig
   readonly circuitBreaker: CircuitBreakerConfig
   readonly overrideTtlMs: number
@@ -426,6 +431,11 @@ export const Config: z<Config> = z.object({
     turns: z.number().default(DEFAULT_CONTEXT_TURNS),
     maxChars: z.number().default(4000),
   }).default({ turns: DEFAULT_CONTEXT_TURNS, maxChars: 4000 }),
+  images: z.object({
+    enabled: z.boolean().default(DEFAULT_IMAGES.enabled),
+    maxCount: z.number().default(DEFAULT_IMAGES.maxCount),
+    maxBytes: z.number().default(DEFAULT_IMAGES.maxBytes),
+  }).default({ ...DEFAULT_IMAGES }),
   riskPolicy: z.object({
     maxAutoAllow: RISK.default('high'),
     onHighRisk: z.union(['delegate', 'deny'] as const).default('delegate'),
@@ -571,6 +581,14 @@ export function resolveConfig(config: Config = {}): ResolvedConfig {
   if (!Number.isSafeInteger(contextChars) || contextChars <= 0) {
     throw new TypeError(`contextBudget.maxChars must be a positive safe integer, got ${String(contextChars)}`)
   }
+  const imageCount = config.images?.maxCount ?? DEFAULT_IMAGES.maxCount
+  if (!Number.isSafeInteger(imageCount) || imageCount <= 0) {
+    throw new TypeError(`images.maxCount must be a positive safe integer, got ${String(imageCount)}`)
+  }
+  const imageBytes = config.images?.maxBytes ?? DEFAULT_IMAGES.maxBytes
+  if (!Number.isSafeInteger(imageBytes) || imageBytes <= 0) {
+    throw new TypeError(`images.maxBytes must be a positive safe integer, got ${String(imageBytes)}`)
+  }
   const breaker = config.circuitBreaker ?? {}
   for (const [key, value] of [['consecutiveDenies', breaker.consecutiveDenies ?? 3], ['windowDenies', breaker.windowDenies ?? 6], ['windowSize', breaker.windowSize ?? 10]] as const) {
     if (!Number.isSafeInteger(value) || value <= 0) {
@@ -641,6 +659,11 @@ export function resolveConfig(config: Config = {}): ResolvedConfig {
     reviewerPolicyText: config.reviewerPolicyText,
     denyGuidance: config.denyGuidance ?? DEFAULT_DENY_GUIDANCE,
     contextBudget: { turns, maxChars: contextChars },
+    images: {
+      enabled: config.images?.enabled ?? DEFAULT_IMAGES.enabled,
+      maxCount: imageCount,
+      maxBytes: imageBytes,
+    },
     riskPolicy: {
       maxAutoAllow: config.riskPolicy?.maxAutoAllow ?? 'high',
       onHighRisk: config.riskPolicy?.onHighRisk ?? 'delegate',

@@ -1,0 +1,94 @@
+/**
+ * Reviewer image selection: the caps, eviction order, dedupe, and the disabled
+ * path that keeps the review request text-only.
+ * @module dsh-auto-review/test/images.spec
+ */
+
+import { describe, expect, it } from 'vitest'
+import type { SessionEvent } from '@deepseek-ai/dsh-session'
+import { DEFAULT_IMAGES, selectReviewImages } from '../src/images.ts'
+import { resolveConfig } from '../src/index.ts'
+
+/** One user message carrying one image plus a text part. */
+function imageEvent(id: string, bytes: number): SessionEvent {
+  return {
+    type: 'user/message',
+    data: {
+      content: [
+        { type: 'text', text: `please look at ${id}` },
+        {
+          type: 'image',
+          attachment: {
+            attachmentId: id,
+            mediaType: 'image/png',
+            bytes,
+            width: 8,
+            height: 8,
+          },
+        },
+      ],
+    },
+  } as unknown as SessionEvent
+}
+
+describe('reviewer image selection', () => {
+  it('keeps the newest images under the count cap, in chronological order', () => {
+    const events = Array.from({ length: 6 }, (_, index) => imageEvent(`img-${index}`, 1000))
+    const selected = selectReviewImages(events, DEFAULT_IMAGES)
+    expect(selected.blocks.map(block => block.attachment.attachmentId)).toEqual([
+      'img-2',
+      'img-3',
+      'img-4',
+      'img-5',
+    ])
+    expect(selected.dropped).toBe(2)
+  })
+
+  it('deduplicates repeated occurrences of one attachment', () => {
+    const events = [imageEvent('img-a', 1000), imageEvent('img-a', 1000)]
+    const selected = selectReviewImages(events, DEFAULT_IMAGES)
+    expect(selected.blocks).toHaveLength(1)
+    expect(selected.dropped).toBe(0)
+  })
+
+  it('drops an image whose bytes would exceed the byte cap but keeps smaller older ones', () => {
+    const events = [imageEvent('small-1', 100), imageEvent('huge', 5000), imageEvent('small-2', 100)]
+    const selected = selectReviewImages(events, { enabled: true, maxCount: 4, maxBytes: 250 })
+    expect(selected.blocks.map(block => block.attachment.attachmentId)).toEqual(['small-1', 'small-2'])
+    expect(selected.dropped).toBe(1)
+  })
+
+  it('selects nothing when images are disabled', () => {
+    const events = [imageEvent('img-1', 1000)]
+    expect(selectReviewImages(events, { ...DEFAULT_IMAGES, enabled: false })).toEqual({
+      blocks: [],
+      dropped: 0,
+    })
+  })
+
+  it('ignores events that cannot carry user images', () => {
+    const events = [
+      {
+        type: 'assistant/message',
+        data: { turn: 1, step: 1, message: { role: 'assistant', content: [{ type: 'text', text: 'hi' }] } },
+      },
+    ] as unknown as SessionEvent[]
+    expect(selectReviewImages(events, DEFAULT_IMAGES).blocks).toEqual([])
+  })
+})
+
+describe('image config resolution', () => {
+  it('defaults to forwarding up to four images inside 8 MiB', () => {
+    expect(resolveConfig().images).toEqual({ enabled: true, maxCount: 4, maxBytes: 8 * 1024 * 1024 })
+  })
+
+  it('accepts overrides and rejects non-positive caps', () => {
+    expect(resolveConfig({ images: { enabled: false, maxCount: 2, maxBytes: 1024 } }).images).toEqual({
+      enabled: false,
+      maxCount: 2,
+      maxBytes: 1024,
+    })
+    expect(() => resolveConfig({ images: { maxCount: 0 } })).toThrow(/images\.maxCount/u)
+    expect(() => resolveConfig({ images: { maxBytes: -1 } })).toThrow(/images\.maxBytes/u)
+  })
+})

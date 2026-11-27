@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **The reviewer can see the conversation's user images.** Until now the review request was text-only: `contentText` dropped every non-text block, so a screenshot that authorized an action (or showed the error under discussion) never reached the reviewer and the fail-closed verdict rules turned the missing evidence into a denial. The reviewer now receives the conversation's user images as visual evidence, capped the way the Codex guardian caps them: `images.maxCount` (default 4) newest-first with repeated attachments deduplicated, and `images.maxBytes` (default 8 MiB) dropping the oldest occurrence that no longer fits. `images.enabled: false` restores the previous text-only request. The image blocks are appended after the prompt text block, so the untrusted fence and the verdict rules are read first, and a `[+N image]` marker in the transcript section tells the reviewer where they came from. Nothing about authority changes: images are evidence, never instructions, and every failure path still resolves through `fallbackPolicy`.
+
 ## [0.15.5] - 2026-11-22
 
 ### Changed
