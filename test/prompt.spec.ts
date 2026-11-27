@@ -22,6 +22,10 @@ describe('auto-review runtime context', () => {
     expect(text).toContain('up to 4 images')
     expect(text).toContain('test or a probe of the approval gate are rejected')
     expect(text).toContain('Do not retry around it')
+    // Authority is about whose instruction it is, not the medium: an attached
+    // screenshot is the user's own statement, text it merely captured is not.
+    expect(text).toContain("a screenshot they sent counts as their own statement")
+    expect(text).toContain('captured')
   })
 
   it('says every tool is reviewed when the default policy is ai', () => {
