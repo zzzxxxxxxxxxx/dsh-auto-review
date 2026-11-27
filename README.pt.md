@@ -389,7 +389,7 @@ Chaves mais usadas:
 | `denyGuidance` | *(texto anti-contorno)* | Orientação anexada a todo motivo de negação injetado |
 | `contextBudget` | `{turns: 8, maxChars: 48000}` | Orçamento de transcrição compacta para o prompt do revisor (o turno aberto mais o anterior); `turns: 0` desabilita a seção — e um revisor cego nega ações autorizadas pelo usuário, então o runtime avisa quando 0 encontra uma política `ai`. O orçamento de caracteres é gasto nas linhas mais recentes |
 | `images` | `{enabled: true, maxCount: 4, maxBytes: 8388608}` | Imagens do usuário enviadas ao revisor como evidência visual (limites estilo Codex: mais recentes primeiro, anexos duplicados removidos e as mais antigas descartadas ao atingir o limite de quantidade ou bytes). Com `enabled: false` a requisição é apenas texto. Imagens são apenas evidência e nunca sobrepõem as regras de veredito |
-| `riskPolicy` | `{maxAutoAllow: high, autoAllowScore: 80, onHighRisk: delegate}` | Vereditos `allow` acima de `maxAutoAllow` delegam ou negam |
+| `riskPolicy` | `{maxAutoAllow: high, autoAllowScore: 100, minAuthorizationForHigh: medium, onHighRisk: delegate}` | Vereditos `allow` acima de `maxAutoAllow` delegam ou negam |
 | `circuitBreaker` | `{consecutiveDenies: 3, windowDenies: 6, windowSize: 10, action: delegate}` | Disjuntor de rejeições |
 | `overrideTtlMs` | `300000` | Por quanto tempo um override `/auto-review approve` permanece utilizável |
 | `verdictCacheTtlMs` | `60000` | Reusa um veredito recente para um fingerprint idêntico de `tool + arguments`; `0` desabilita o cache. Só se aplica com `contextBudget.turns: 0` — um veredito dependente de transcrição não é reproduzível só por `tool + arguments` |

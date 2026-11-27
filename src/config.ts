@@ -25,6 +25,28 @@ export type ToolReviewPolicy = 'ai' | 'human' | 'never'
 export type RiskLevel = 'low' | 'medium' | 'high'
 
 /**
+ * What the reviewer may report: the three cap levels plus `critical`, which the
+ * Codex guardian denies outright (exfiltration or major irreversible damage).
+ * A critical verdict never settles as an allow, whatever the policy says.
+ */
+export type ReviewRiskLevel = RiskLevel | 'critical'
+
+/** Where `level` ranks in {@link REVIEW_RISK_ORDER}; monotonic in severity. */
+export const REVIEW_RISK_ORDER: readonly ReviewRiskLevel[] = ['low', 'medium', 'high', 'critical']
+
+/**
+ * How strongly the transcript authorizes the pending action, mirroring the
+ * Codex guardian's `user_authorization` dimension. Risk answers "how bad if
+ * wrong"; authorization answers "did the user ask for this". A high-risk action
+ * is only auto-approved when the second one is strong enough — a dangerous
+ * action the user explicitly named is not the same as drift.
+ */
+export type AuthorizationLevel = 'unknown' | 'low' | 'medium' | 'high'
+
+/** How `authorization` ranks in {@link AUTHORIZATION_ORDER}. */
+export const AUTHORIZATION_ORDER: readonly AuthorizationLevel[] = ['unknown', 'low', 'medium', 'high']
+
+/**
  * Which engine answers an `ai`-policy review:
  *
  * - `'agent'` — the generative reviewer (an isolated read-only child, or a
@@ -180,11 +202,15 @@ export const DEFAULT_CONTEXT_TURNS = 8
 export const DEFAULT_CONTEXT_CHARS = 48_000
 
 /**
- * Default {@link RiskPolicyConfig.autoAllowScore}: the Codex guardian's MVP
- * threshold (it auto-approved only when `risk_score < 80`). An allow verdict at
- * or above this score is handled by {@link RiskPolicyConfig.onHighRisk}.
+ * Default {@link RiskPolicyConfig.autoAllowScore}: an inert safety valve.
+ *
+ * The Codex guardian's MVP gated allows on `risk_score < 80`, but the current
+ * contract decides from `(risk_level, user_authorization)` instead, and the
+ * plugin follows that table. The numeric score stays recorded (and still blocks
+ * an allow at or above this value) so a reviewer that reports a maximal score
+ * can veto an otherwise-allowed call; 100 keeps that valve closed by default.
  */
-export const DEFAULT_AUTO_ALLOW_SCORE = 80
+export const DEFAULT_AUTO_ALLOW_SCORE = 100
 
 /** What a tripped rejection circuit breaker does to later ai-policy requests in the turn. */
 export type CircuitAction = 'delegate' | 'reject' | 'abort-turn'
@@ -223,6 +249,12 @@ export interface RiskPolicyConfig {
    * {@link maxAutoAllow} alone decides.
    */
   readonly autoAllowScore: number
+  /**
+   * The weakest `userAuthorization` that lets a `high`-risk allow settle. The
+   * Codex guardian requires at least `medium` ("clearly authorized in substance
+   * or effect"); below the floor the allow is handled by {@link onHighRisk}.
+   */
+  readonly minAuthorizationForHigh: AuthorizationLevel
   /** What happens to an allow verdict above the cap. */
   readonly onHighRisk: 'delegate' | 'deny'
 }
@@ -465,8 +497,14 @@ export const Config: z<Config> = z.object({
   riskPolicy: z.object({
     maxAutoAllow: RISK.default('high'),
     autoAllowScore: z.number().default(DEFAULT_AUTO_ALLOW_SCORE),
+    minAuthorizationForHigh: z.union(AUTHORIZATION_ORDER as unknown as [AuthorizationLevel, ...AuthorizationLevel[]]).default('medium'),
     onHighRisk: z.union(['delegate', 'deny'] as const).default('delegate'),
-  }).default({ maxAutoAllow: 'high', autoAllowScore: DEFAULT_AUTO_ALLOW_SCORE, onHighRisk: 'delegate' }),
+  }).default({
+    maxAutoAllow: 'high',
+    autoAllowScore: DEFAULT_AUTO_ALLOW_SCORE,
+    minAuthorizationForHigh: 'medium',
+    onHighRisk: 'delegate',
+  }),
   circuitBreaker: z.object({
     consecutiveDenies: z.number().default(3),
     // The window defaults must stay reachable under the default
@@ -698,6 +736,7 @@ export function resolveConfig(config: Config = {}): ResolvedConfig {
     riskPolicy: {
       maxAutoAllow: config.riskPolicy?.maxAutoAllow ?? 'high',
       autoAllowScore,
+      minAuthorizationForHigh: config.riskPolicy?.minAuthorizationForHigh ?? 'medium',
       onHighRisk: config.riskPolicy?.onHighRisk ?? 'delegate',
     },
     circuitBreaker: {

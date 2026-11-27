@@ -391,7 +391,7 @@ Claude Desktop（`claude_desktop_config.json`）配置示例：
 | `denyGuidance` | *(反规避文本)* | 追加到每一条注入的拒绝理由之后的指导 |
 | `contextBudget` | `{turns: 8, maxChars: 48000}` | 审查器提示词的紧凑记录预算（当前回合加上一回合）；`turns: 0` 表示禁用该段落——没有记录的审查器会拒绝用户已授权的操作，因此当 0 与 `ai` 策略同时出现时运行时会发出警告。字符预算优先用于最近的行 |
 | `images` | `{enabled: true, maxCount: 4, maxBytes: 8388608}` | 把会话里的用户图片作为视觉证据发给审查器（Codex 风格上限：取最新的，重复附件去重，超出数量/字节上限时丢最旧的）。`enabled: false` 时请求只含文本。图片只是证据，不能覆盖判定规则 |
-| `riskPolicy` | `{maxAutoAllow: high, autoAllowScore: 80, onHighRisk: delegate}` | 超过 `maxAutoAllow` 的 `allow` 裁决委派或拒绝 |
+| `riskPolicy` | `{maxAutoAllow: high, autoAllowScore: 100, minAuthorizationForHigh: medium, onHighRisk: delegate}` | 超过 `maxAutoAllow` 的 `allow` 裁决委派或拒绝 |
 | `circuitBreaker` | `{consecutiveDenies: 3, windowDenies: 6, windowSize: 10, action: delegate}` | 拒绝熔断器 |
 | `overrideTtlMs` | `300000` | `/auto-review approve` 覆盖的有效时长 |
 | `verdictCacheTtlMs` | `60000` | 对相同 `工具 + 参数` 指纹复用近期裁决的时长；`0` 关闭缓存。仅在 `contextBudget.turns: 0` 时生效——依赖会话记录的裁决无法仅凭 `工具 + 参数` 重放 |

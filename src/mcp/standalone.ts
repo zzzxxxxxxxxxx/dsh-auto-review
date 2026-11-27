@@ -19,7 +19,7 @@
 
 import { fingerprint, VerdictCache } from '../cache.ts'
 import { resolveConfig } from '../config.ts'
-import type { Config, ResolvedConfig, RiskLevel, ToolReviewPolicy } from '../config.ts'
+import type { Config, ResolvedConfig, ReviewRiskLevel, ToolReviewPolicy } from '../config.ts'
 
 /** One standalone review request: the tool plus its (optional) arguments and reason. */
 export interface StandaloneReviewInput {
@@ -32,7 +32,7 @@ export interface StandaloneReviewInput {
 export interface StandaloneVerdict {
   readonly decision: 'allow' | 'deny'
   readonly reason: string
-  readonly riskLevel: RiskLevel
+  readonly riskLevel: ReviewRiskLevel
   /** True when the verdict was replayed from the same-fingerprint cache. */
   readonly cached?: boolean
 }

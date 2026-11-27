@@ -24,7 +24,8 @@ const VERDICT_VIEW_SCHEMA = z.object({
   at: z.number(),
   durationMs: z.number().int().nonnegative(),
   decision: z.union([z.literal('allow'), z.literal('deny')]).optional(),
-  riskLevel: z.union([z.literal('low'), z.literal('medium'), z.literal('high')]).optional(),
+  riskLevel: z.union([z.literal('low'), z.literal('medium'), z.literal('high'), z.literal('critical')]).optional(),
+  userAuthorization: z.union([z.literal('unknown'), z.literal('low'), z.literal('medium'), z.literal('high')]).optional(),
   riskScore: z.number().int().min(0).max(100).optional(),
   escalation: z.literal('risk-policy').optional(),
   fallback: z.string().optional(),
@@ -110,6 +111,7 @@ function verdictView(data: SessionEventMap['autoReview/verdict'], at: number): A
   }
   if (data.decision !== undefined) view.decision = data.decision
   if (data.riskLevel !== undefined) view.riskLevel = data.riskLevel
+  if (data.userAuthorization !== undefined) view.userAuthorization = data.userAuthorization
   if (data.riskScore !== undefined) view.riskScore = data.riskScore
   if (data.escalation !== undefined) view.escalation = data.escalation
   if (data.fallback !== undefined) view.fallback = data.fallback

@@ -19,13 +19,15 @@
  */
 
 import { createHash } from 'node:crypto'
-import type { RiskLevel } from './config.ts'
+import type { AuthorizationLevel, ReviewRiskLevel } from './config.ts'
 
 /** The verdict a cache entry replays — exactly the reviewer's closed decision vocabulary. */
 export interface CachedVerdict {
   readonly decision: 'allow' | 'deny'
   readonly reason: string
-  readonly riskLevel?: RiskLevel
+  readonly riskLevel?: ReviewRiskLevel
+  readonly userAuthorization?: AuthorizationLevel
+  readonly riskScore?: number
 }
 
 /**

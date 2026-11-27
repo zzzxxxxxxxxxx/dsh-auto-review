@@ -16,7 +16,7 @@ import type { Branded } from '@deepseek-ai/dsh-brand'
 import { CallId } from './call-id.ts'
 import type { SessionEvent, SessionEventMap, SessionId } from '@deepseek-ai/dsh-session'
 import type { ApprovalOutcome, ApprovalRequestId } from '@deepseek-ai/dsh-user-approval'
-import type { CircuitAction, RiskLevel } from './config.ts'
+import type { AuthorizationLevel, CircuitAction, ReviewRiskLevel } from './config.ts'
 
 declare module '@deepseek-ai/dsh-session/types' {
   interface SessionEventMap {
@@ -48,7 +48,9 @@ declare module '@deepseek-ai/dsh-session/types' {
       durationMs: number
       decision?: 'allow' | 'deny'
       reason?: string
-      riskLevel?: RiskLevel
+      riskLevel?: ReviewRiskLevel
+      /** How strongly the transcript authorized the action (Codex's second dimension). */
+      userAuthorization?: AuthorizationLevel
       /** The reviewer's numeric risk score (0-100), when it reported one. */
       riskScore?: number
       outcome?: ApprovalOutcome
@@ -462,7 +464,7 @@ export interface RecentDeny {
   readonly reviewId: AutoReviewVerdictId
   readonly toolName: string
   readonly reason?: string
-  readonly riskLevel?: RiskLevel
+  readonly riskLevel?: ReviewRiskLevel
 }
 
 /**

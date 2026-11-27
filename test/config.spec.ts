@@ -63,7 +63,12 @@ describe('config resolution', () => {
     const resolved = resolveConfig()
     expect(resolved.denyGuidance).toContain('Do not attempt')
     expect(resolved.contextBudget).toEqual({ turns: DEFAULT_CONTEXT_TURNS, maxChars: DEFAULT_CONTEXT_CHARS })
-    expect(resolved.riskPolicy).toEqual({ maxAutoAllow: 'high', autoAllowScore: 80, onHighRisk: 'delegate' })
+    expect(resolved.riskPolicy).toEqual({
+      maxAutoAllow: 'high',
+      autoAllowScore: 100,
+      minAuthorizationForHigh: 'medium',
+      onHighRisk: 'delegate',
+    })
     expect(resolved.circuitBreaker).toEqual({ consecutiveDenies: 3, windowDenies: 6, windowSize: 10, action: 'delegate' })
     expect(resolved.overrideTtlMs).toBe(5 * 60_000)
     expect(resolved.reviewerPolicyText).toBeUndefined()

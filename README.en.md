@@ -391,7 +391,7 @@ Most-used keys:
 | `denyGuidance` | *(anti-circumvention text)* | Guidance appended to every injected deny reason |
 | `contextBudget` | `{turns: 8, maxChars: 48000}` | Compact transcript budget for the reviewer prompt (the open turn plus the one before it); `turns: 0` disables the section — and a blind reviewer denies user-authorized actions, so the runtime warns when 0 meets an `ai` policy. The character budget is spent on the most recent lines |
 | `images` | `{enabled: true, maxCount: 4, maxBytes: 8388608}` | User images forwarded to the reviewer as visual evidence (Codex-style caps: newest first, duplicate attachments removed, oldest dropped once the count or byte cap is hit). `enabled: false` keeps the request text-only. Images are evidence only and never override the verdict rules |
-| `riskPolicy` | `{maxAutoAllow: high, autoAllowScore: 80, onHighRisk: delegate}` | `allow` verdicts above `maxAutoAllow` delegate or deny |
+| `riskPolicy` | `{maxAutoAllow: high, autoAllowScore: 100, minAuthorizationForHigh: medium, onHighRisk: delegate}` | `allow` verdicts above `maxAutoAllow` delegate or deny |
 | `circuitBreaker` | `{consecutiveDenies: 3, windowDenies: 6, windowSize: 10, action: delegate}` | Rejection circuit breaker |
 | `overrideTtlMs` | `300000` | How long a `/auto-review approve` override stays usable |
 | `verdictCacheTtlMs` | `60000` | Reuse a recent verdict for an identical `tool + arguments` fingerprint; `0` disables the cache. Only applies with `contextBudget.turns: 0` — a transcript-dependent verdict is not replayable from `tool + arguments` alone |

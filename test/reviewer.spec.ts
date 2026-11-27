@@ -69,7 +69,7 @@ function promptConfig(overrides: Partial<ResolvedConfig> = {}): ResolvedConfig {
     reviewerPolicyText: undefined,
     denyGuidance: 'do not bypass',
     contextBudget: { turns: 0, maxChars: 4000 },
-    riskPolicy: { maxAutoAllow: 'high', autoAllowScore: 80, onHighRisk: 'delegate' },
+    riskPolicy: { maxAutoAllow: 'high', autoAllowScore: 80, minAuthorizationForHigh: 'medium', onHighRisk: 'delegate' },
     circuitBreaker: { consecutiveDenies: 3, windowDenies: 10, windowSize: 50, action: 'delegate' },
     overrideTtlMs: 300_000,
     verdictCacheTtlMs: 60_000,
@@ -114,7 +114,7 @@ describe('reviewer prompt', () => {
       reviewerPolicyText: undefined,
       denyGuidance: 'do not bypass',
       contextBudget: { turns: 0, maxChars: 4000 },
-      riskPolicy: { maxAutoAllow: 'high', autoAllowScore: 80, onHighRisk: 'delegate' },
+      riskPolicy: { maxAutoAllow: 'high', autoAllowScore: 80, minAuthorizationForHigh: 'medium', onHighRisk: 'delegate' },
       circuitBreaker: { consecutiveDenies: 3, windowDenies: 10, windowSize: 50, action: 'delegate' },
       overrideTtlMs: 300_000,
       verdictCacheTtlMs: 60_000,
@@ -167,7 +167,7 @@ describe('reviewer prompt', () => {
       reviewerPolicyText: undefined,
       denyGuidance: 'do not bypass',
       contextBudget: { turns: 0, maxChars: 4000 },
-      riskPolicy: { maxAutoAllow: 'high', autoAllowScore: 80, onHighRisk: 'delegate' },
+      riskPolicy: { maxAutoAllow: 'high', autoAllowScore: 80, minAuthorizationForHigh: 'medium', onHighRisk: 'delegate' },
       circuitBreaker: { consecutiveDenies: 3, windowDenies: 10, windowSize: 50, action: 'delegate' },
       overrideTtlMs: 300_000,
       verdictCacheTtlMs: 60_000,
@@ -229,7 +229,8 @@ describe('verdict schema and parsing', () => {
     })
     expect(parseVerdict({ decision: 'maybe', reason: 'x' }, 100)).toBeUndefined()
     expect(parseVerdict({ decision: 'allow', reason: '  ' }, 100)).toBeUndefined()
-    expect(parseVerdict({ decision: 'allow', reason: 'x', riskLevel: 'critical' }, 100)).toBeUndefined()
+    // `critical` is part of the vocabulary now; an unknown level still fails closed.
+    expect(parseVerdict({ decision: 'allow', reason: 'x', riskLevel: 'severe' }, 100)).toBeUndefined()
     expect(parseVerdict('nope', 100)).toBeUndefined()
   })
 

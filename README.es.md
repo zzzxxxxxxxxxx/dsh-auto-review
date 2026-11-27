@@ -389,7 +389,7 @@ Claves más usadas:
 | `denyGuidance` | *(texto anti-elusión)* | Orientación añadida a cada razón de denegación inyectada |
 | `contextBudget` | `{turns: 8, maxChars: 48000}` | Presupuesto de transcripción compacta para el prompt del revisor (el turno abierto y el anterior); `turns: 0` desactiva la sección — y un revisor ciego deniega acciones autorizadas por el usuario, así que el runtime avisa cuando 0 coincide con una política `ai`. El presupuesto de caracteres se gasta en las líneas más recientes |
 | `images` | `{enabled: true, maxCount: 4, maxBytes: 8388608}` | Imágenes del usuario enviadas al revisor como evidencia visual (límites estilo Codex: primero las más recientes, se eliminan adjuntos duplicados y se descartan las más antiguas al alcanzar el límite de cantidad o bytes). Con `enabled: false` la petición es solo texto. Las imágenes son solo evidencia y nunca anulan las reglas de veredicto |
-| `riskPolicy` | `{maxAutoAllow: high, autoAllowScore: 80, onHighRisk: delegate}` | Los veredictos `allow` por encima de `maxAutoAllow` delegan o deniegan |
+| `riskPolicy` | `{maxAutoAllow: high, autoAllowScore: 100, minAuthorizationForHigh: medium, onHighRisk: delegate}` | Los veredictos `allow` por encima de `maxAutoAllow` delegan o deniegan |
 | `circuitBreaker` | `{consecutiveDenies: 3, windowDenies: 6, windowSize: 10, action: delegate}` | Disyuntor de rechazos |
 | `overrideTtlMs` | `300000` | Cuánto dura una anulación de `/auto-review approve` |
 | `verdictCacheTtlMs` | `60000` | Reutiliza un veredicto reciente para una huella `herramienta + argumentos` idéntica; `0` desactiva la caché. Solo se aplica con `contextBudget.turns: 0` — un veredicto que depende de la transcripción no es reproducible solo desde `herramienta + argumentos` |

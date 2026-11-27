@@ -24,7 +24,7 @@ import type { UserMessage } from '@deepseek-ai/dsh-llm/message'
 import type { CallId } from './call-id.ts'
 import { auditRecordEventType, isMarkedAuditEvent, isUnmarkedHostVersion, loadAppendPluginRecord, peerSessionVersion, type AuditSupport } from './audit.ts'
 import { fingerprint, VerdictCache } from './cache.ts'
-import { hasAiPolicy, resolveConfig, riskExceeds } from './config.ts'
+import { AUTHORIZATION_ORDER, hasAiPolicy, resolveConfig, riskExceeds } from './config.ts'
 import type { Config, ResolvedConfig, ToolReviewPolicy } from './config.ts'
 import { guardReviewerContext, ReviewerChildren } from './isolation.ts'
 import { messages } from './messages.ts'
@@ -850,6 +850,7 @@ export class AutoReviewRuntime {
             decision: resolution.decision,
             reason: resolution.reason,
             ...resolution.riskLevel !== undefined ? { riskLevel: resolution.riskLevel } : {},
+            ...resolution.userAuthorization !== undefined ? { userAuthorization: resolution.userAuthorization } : {},
             ...resolution.riskScore !== undefined ? { riskScore: resolution.riskScore } : {},
           }, started)
         }
@@ -862,17 +863,28 @@ export class AutoReviewRuntime {
       return this.finish(request, approvalId, resolution, next, durationMs, receipt)
     }
     const reviewId = newVerdictId()
-    // Codex's guardian gates an allow on a numeric risk score; the level cap
-    // stays as the fallback for verdicts that carry no score (Phocinae and
-    // cached verdicts written before the score existed).
+    // The Codex guardian's table: low/medium risk settles regardless of
+    // authorization; high risk settles only when the transcript authorizes it
+    // at least `minAuthorizationForHigh`; critical is never auto-approved.
+    // The level cap and the numeric valve remain as fallbacks for verdicts
+    // that predate the authorization dimension.
+    const authorization = resolution.userAuthorization ?? 'unknown'
+    const belowAuthorizationFloor = resolution.riskLevel === 'high'
+      && AUTHORIZATION_ORDER.indexOf(authorization)
+        < AUTHORIZATION_ORDER.indexOf(this.config.riskPolicy.minAuthorizationForHigh)
+    const levelOver = resolution.riskLevel !== undefined
+      && resolution.riskLevel !== 'critical'
+      && riskExceeds(resolution.riskLevel, this.config.riskPolicy.maxAutoAllow)
     const scoreOver = resolution.riskScore !== undefined
       && resolution.riskScore >= this.config.riskPolicy.autoAllowScore
-    const levelOver = resolution.riskLevel !== undefined
-      && riskExceeds(resolution.riskLevel, this.config.riskPolicy.maxAutoAllow)
-    const overridden = resolution.decision === 'allow' && (scoreOver || levelOver)
-    const outcome: ApprovalOutcome | undefined = overridden
-      ? this.config.riskPolicy.onHighRisk === 'deny' ? 'rejected' : undefined
-      : resolution.decision === 'allow' ? 'allowed-once' : 'rejected'
+    const critical = resolution.riskLevel === 'critical'
+    const overridden = resolution.decision === 'allow'
+      && (belowAuthorizationFloor || levelOver || scoreOver)
+    const outcome: ApprovalOutcome | undefined = resolution.decision === 'deny' || critical
+      ? 'rejected'
+      : overridden
+        ? this.config.riskPolicy.onHighRisk === 'deny' ? 'rejected' : undefined
+        : 'allowed-once'
     if (receipt !== undefined) {
       receipt.category = 'review'
       receipt.reviewId = String(reviewId)
@@ -911,6 +923,7 @@ export class AutoReviewRuntime {
         decision: resolution.decision,
         reason: resolution.reason,
         ...resolution.riskLevel !== undefined ? { riskLevel: resolution.riskLevel } : {},
+        ...resolution.userAuthorization !== undefined ? { userAuthorization: resolution.userAuthorization } : {},
         ...resolution.riskScore !== undefined ? { riskScore: resolution.riskScore } : {},
         ...overridden ? { escalation: 'risk-policy' } : {},
         ...outcome !== undefined ? { outcome } : {},

@@ -12,7 +12,9 @@ export interface AutoReviewVerdictView {
   readonly at: number
   readonly durationMs: number
   readonly decision?: 'allow' | 'deny'
-  readonly riskLevel?: 'low' | 'medium' | 'high'
+  readonly riskLevel?: 'low' | 'medium' | 'high' | 'critical'
+  /** How strongly the transcript authorized the action. */
+  readonly userAuthorization?: 'unknown' | 'low' | 'medium' | 'high'
   /** The reviewer's numeric risk score (0-100), when it reported one. */
   readonly riskScore?: number
   readonly escalation?: 'risk-policy'
