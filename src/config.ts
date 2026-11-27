@@ -455,7 +455,7 @@ export const Config: z<Config> = z.object({
   denyGuidance: z.string().default(DEFAULT_DENY_GUIDANCE),
   contextBudget: z.object({
     turns: z.number().default(DEFAULT_CONTEXT_TURNS),
-    maxChars: z.number().default(4000),
+    maxChars: z.number().default(DEFAULT_CONTEXT_CHARS),
   }).default({ turns: DEFAULT_CONTEXT_TURNS, maxChars: DEFAULT_CONTEXT_CHARS }),
   images: z.object({
     enabled: z.boolean().default(DEFAULT_IMAGES.enabled),
