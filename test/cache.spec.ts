@@ -111,3 +111,19 @@ describe('VerdictCache', () => {
     expect(cache.get('fp', 2)).toBeUndefined()
   })
 })
+
+describe('image set in the fingerprint', () => {
+  it('treats a different image set as a different request', () => {
+    const args = '{"command":"echo hi"}'
+    const none = fingerprint('bash', args)
+    const one = fingerprint('bash', args, ['img-a'])
+    const other = fingerprint('bash', args, ['img-b'])
+    expect(none).not.toBe(one)
+    expect(one).not.toBe(other)
+  })
+
+  it('ignores selection order and duplicate occurrences', () => {
+    const args = '{"command":"echo hi"}'
+    expect(fingerprint('bash', args, ['b', 'a'])).toBe(fingerprint('bash', args, ['a', 'b', 'a']))
+  })
+})

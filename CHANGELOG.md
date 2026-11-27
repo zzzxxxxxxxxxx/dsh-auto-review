@@ -22,6 +22,9 @@
 
 ### Fixed
 
+- **The verdict cache ignored the images the reviewer had seen.** The fingerprint was `tool + arguments` only, so the same command repeated after the user attached a different screenshot — or no screenshot — replayed the earlier verdict (`cached: true`) even though the reviewer's evidence, including the authorization an image can carry, had changed. The selected image ids now participate in the digest (order-insensitive, deduplicated).
+
+
 - **A `critical` allow ran the tool.** The table marked `critical` as rejected, but the settlement only re-checked `decision === 'deny'` and the risk-policy override, so a `{"decision":"allow","riskLevel":"critical"}` verdict fell through to `allowed-once` — the call executed, the audit recorded `rejected`, and the rejection circuit never counted it. A critical verdict is now a denial on its own, regardless of `onHighRisk`.
 - **Images from plugin-injected `user/message` rows counted as user authorization.** Selection only checked the event type, so any bridge or mod that injected a user-shaped message could attach a screenshot and have it weigh as the user's own evidence. Only `source.kind === 'user'` messages qualify now, and two tests pin both directions.
 - **A refused audit append left the runtime believing its log was authoritative.** `appendPluginRecord` throws on a session it cannot write; the catch logged and dropped the record while `auditSupport` stayed `supported`, so the per-turn budget, the circuit breaker and `/auto-review approve` silently read zero. The no-writer branch is now inside the same guard, and any refusal degrades to the in-memory mirror with the one-time warning.

@@ -92,10 +92,16 @@ export function canonicalArguments(value: unknown): string {
  * @param toolName - the pending tool call's name.
  * @param rawArguments - the presented call arguments as raw JSON text, or
  *   undefined when the log lacks them.
+ * @param imageIds - the conversation images the reviewer would see; a different
+ *   set is a different decision, so it participates in the digest.
  * @returns the hex digest, or undefined when the arguments are absent or
  *   unparseable (the caller must then skip the cache, preserving fail-closed).
  */
-export function fingerprint(toolName: string, rawArguments: string | undefined): string | undefined {
+export function fingerprint(
+  toolName: string,
+  rawArguments: string | undefined,
+  imageIds: readonly string[] = [],
+): string | undefined {
   if (rawArguments === undefined) return undefined
   let parsed: unknown
   try {
@@ -109,7 +115,12 @@ export function fingerprint(toolName: string, rawArguments: string | undefined):
   } catch {
     return undefined
   }
-  return createHash('sha256').update(`${toolName}\u0000${canonical}`, 'utf8').digest('hex')
+  // The reviewer also reads the conversation's images, and an image can carry
+  // the user's authorization. Two calls with the same tool and arguments but a
+  // different image set are not the same decision, so the set is part of the
+  // key (sorted: selection order is not part of the identity).
+  const images = imageIds.length === 0 ? '' : `\u0000${[...new Set(imageIds)].sort().join('\u0000')}`
+  return createHash('sha256').update(`${toolName}\u0000${canonical}${images}`, 'utf8').digest('hex')
 }
 
 /** Construction parameters for a {@link VerdictCache}. */

@@ -28,6 +28,7 @@ import { AUTHORIZATION_ORDER, hasAiPolicy, resolveConfig, riskExceeds } from './
 import type { Config, ResolvedConfig, ToolReviewPolicy } from './config.ts'
 import { guardReviewerContext, ReviewerChildren } from './isolation.ts'
 import { messages } from './messages.ts'
+import { selectReviewImages } from './images.ts'
 import { renderAutoReviewContext } from './prompt.ts'
 import { makeAutoReviewProjection, viewAutoReview } from './projection.ts'
 import type { AutoReviewProjection, AutoReviewProjectionState } from './projection-types.ts'
@@ -818,7 +819,13 @@ export class AutoReviewRuntime {
     // `run_code` row is shared by every sub-call in the program, so two
     // different inner calls would collide on one cached verdict.
     if (lookup.outcome !== 'found' || lookup.call.callId !== String(request.callId)) return undefined
-    return fingerprint(request.toolName, lookup.call.argumentsText)
+    // The reviewer's evidence includes the conversation's images, so the image
+    // set is part of the request identity.
+    const images = this.config.images.enabled
+      ? selectReviewImages(sessionEvents(request.agent.session), this.config.images).blocks
+        .map(block => String(block.attachment.attachmentId))
+      : []
+    return fingerprint(request.toolName, lookup.call.argumentsText, images)
   }
 
   /**
