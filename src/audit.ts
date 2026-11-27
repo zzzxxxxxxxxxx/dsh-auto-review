@@ -186,6 +186,64 @@ export function loadAppendPluginRecord(): AppendPluginRecord | null {
   return appendPluginRecord
 }
 
+/** Session class → the appender owned by the module that defined it. */
+const appendersBySessionClass = new Map<unknown, AppendPluginRecord | null>()
+
+/**
+ * Append one plugin record through the module that OWNS the session's class.
+ *
+ * `appendPluginRecord` is `session.#appendRecord(...)` under the hood (the
+ * module-level function is a closure over the class), so calling it from a
+ * different copy of `@deepseek-ai/dsh-session` fails the private-field brand
+ * check with "Receiver must be an instance of class Session". A profile that
+ * links the plugin therefore has TWO copies in play — the plugin's own dev
+ * dependency and the host's — and only the host's copy can write the host's
+ * sessions. Resolution is therefore keyed by class identity, host candidate
+ * first, and cached per class.
+ * @param session - the session the record belongs to.
+ * @param type - the `plugin:`-prefixed event type.
+ * @param data - the record payload.
+ * @returns whatever the owning module's appender returned.
+ * @throws when no resolvable module owns this session class.
+ */
+export function appendPluginRecordFor(session: unknown, type: string, data: unknown): unknown {
+  const ctor = Object.getPrototypeOf(session as object)?.constructor
+  if (appendersBySessionClass.has(ctor)) {
+    const pinned = appendersBySessionClass.get(ctor)
+    if (pinned === null || pinned === undefined) {
+      throw new Error('auto-review: no resolvable @deepseek-ai/dsh-session owns this Session class')
+    }
+    return pinned(session, type, data)
+  }
+  const candidates: string[] = []
+  const entry = process.argv[1]
+  if (entry !== undefined) {
+    try {
+      candidates.push(realpathSync(entry))
+    } catch {
+      // A virtual argv[1] (eval, test runner) yields no host candidate.
+    }
+  }
+  candidates.push(import.meta.url)
+  for (const candidate of candidates) {
+    try {
+      const mod = createRequire(candidate)('@deepseek-ai/dsh-session') as {
+        appendPluginRecord?: unknown
+        Session?: unknown
+      }
+      if (typeof mod.appendPluginRecord !== 'function') continue
+      if (mod.Session !== ctor) continue
+      const append = mod.appendPluginRecord as AppendPluginRecord
+      appendersBySessionClass.set(ctor, append)
+      return append(session, type, data)
+    } catch {
+      // Not resolvable, or it threw before the class comparison; try the next.
+    }
+  }
+  appendersBySessionClass.set(ctor, null)
+  throw new Error('auto-review: no resolvable @deepseek-ai/dsh-session owns this Session class')
+}
+
 /**
  * The log event type an audit record of `kind` is written under.
  * @param kind - the audit kind (`verdict`, `rejection`, `circuit`, `state`, `override`).

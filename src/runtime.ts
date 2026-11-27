@@ -22,7 +22,7 @@ import type { PostToolDecision, ToolExecution, ToolExecutionResult } from '@deep
 import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
 import type { UserMessage } from '@deepseek-ai/dsh-llm/message'
 import type { CallId } from './call-id.ts'
-import { auditRecordEventType, isMarkedAuditEvent, isUnmarkedHostVersion, loadAppendPluginRecord, peerSessionVersion, type AuditSupport } from './audit.ts'
+import { appendPluginRecordFor, auditRecordEventType, isMarkedAuditEvent, isUnmarkedHostVersion, loadAppendPluginRecord, peerSessionVersion, type AuditSupport } from './audit.ts'
 import { fingerprint, VerdictCache } from './cache.ts'
 import { AUTHORIZATION_ORDER, hasAiPolicy, resolveConfig, riskExceeds } from './config.ts'
 import type { Config, ResolvedConfig, ToolReviewPolicy } from './config.ts'
@@ -249,7 +249,10 @@ export class AutoReviewRuntime {
     this.ctx.inject(['systemPrompt'], scope => {
       scope.systemPrompt.context({
         name: 'auto-review:policy',
-        order: scope.systemPrompt.getContextOrder('APPROVAL_POLICY'),
+        // A renamed slot in a future host must not fail the whole mount.
+        order: typeof scope.systemPrompt.getContextOrder === 'function'
+          ? scope.systemPrompt.getContextOrder('APPROVAL_POLICY')
+          : 115,
         text: context => this.promptContextText(context.agent),
       })
     })
@@ -375,17 +378,12 @@ export class AutoReviewRuntime {
    *   or undefined when the host refused the write.
    */
   private appendAuditRecord(session: Session, kind: string, data: unknown): unknown {
-    const append = loadAppendPluginRecord()
-    const type = append === null ? `autoReview/${kind}` : auditRecordEventType(kind)
+    const type = auditRecordEventType(kind)
     try {
-      if (append === null) {
-        return (session.append as unknown as (t: string, d: unknown, o: { ignorable: boolean }) => unknown)(
-          type,
-          data,
-          { ignorable: true },
-        )
-      }
-      append(session, type, data)
+      // Resolve by session-class identity: the appender is a closure over the
+      // class's private method, so a second copy of the package cannot write
+      // the host's sessions (#appendRecord brand check).
+      appendPluginRecordFor(session, type, data)
       // The host stamped the envelope; mirror its shape so the probe sees the marker.
       return { type, ignorable: true }
     } catch (error) {
@@ -1466,16 +1464,26 @@ export function apply(ctx: Context, config: Config): void {
   // context whoever added it — the loop's own runtime-context snapshot
   // included. Non-reviewer steps pass through untouched.
   ctx.on('agent/pre-step', (payload, next) => runtime.guardReviewerContext(payload, next), { prepend: true })
-  ctx.commands.register({
+  // The disposer belongs to the commands/projection SERVICE context, not this
+  // plugin's, so dropping it leaks the registration: a hot remount then dies on
+  // `command "auto-review" is already registered`.
+  ctx.effect(() => ctx.commands.register({
     name: 'auto-review',
     description: messages(resolved.language).description,
     input: { hint: 'on|off|status|approve [n]' },
     handler: invocation => runtime.command(invocation),
-  })
+  }), 'auto-review command')
   runtime.registerPromptContext()
   if (ctx.get('sessionProjections') !== undefined) {
-    ctx.inject(['sessionProjections'], scope => scope.sessionProjections.register(
+    const projectionFiber = ctx.inject(['sessionProjections'], scope => scope.sessionProjections.register(
       makeAutoReviewProjection(resolved.enableByDefault, state => runtime.livePanelView(state)),
     ))
+    ctx.effect(() => () => {
+      // The fiber resolves asynchronously; dispose it once it does, so a
+      // remount does not stack a second registration.
+      void Promise.resolve(projectionFiber)
+        .then(fiber => { (fiber as { dispose?: () => unknown }).dispose?.() })
+        .catch(() => {})
+    }, 'auto-review projection')
   }
 }

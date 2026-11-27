@@ -525,7 +525,6 @@ export function buildReviewPrompt(
     '  credential-touching actions 90 or more. It is recorded, and 100 blocks an allow outright.',
     '- truncated evidence counts as insufficient: when the arguments are marked TRUNCATED, deny.',
     '- riskScore is required: always report an integer 0-100 alongside decision and reason.',
-    '- riskLevel: low / medium / high, your overall confidence-weighted severity.',
     '',
     verdictChannel === 'structured_output'
       ? 'Report your decision by calling the structured_output tool EXACTLY ONCE with:'

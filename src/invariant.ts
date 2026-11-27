@@ -83,6 +83,7 @@ export const inject = ['invariants']
 const DECISIONS: readonly string[] = ['allow', 'deny']
 const RISK_LEVELS: readonly string[] = ['low', 'medium', 'high', 'critical']
 const OUTCOMES: readonly string[] = ['allowed-once', 'rejected', 'cancelled', 'unavailable']
+const AUTHORIZATION_LEVELS: readonly string[] = ['unknown', 'low', 'medium', 'high']
 const TRIP_KINDS: readonly string[] = ['consecutive', 'window']
 const CIRCUIT_ACTIONS: readonly string[] = ['delegate', 'reject', 'abort-turn']
 
@@ -129,6 +130,14 @@ const install: InvariantInstaller = Object.assign((ctx: Context, fail: Invariant
         }
         if (typeof data.reason !== 'string' || data.reason.length === 0) {
           fail(`autoReview/verdict ${JSON.stringify(data.reviewId)} has no reviewer reason`)
+        }
+        if (data.userAuthorization !== undefined && !AUTHORIZATION_LEVELS.includes(data.userAuthorization)) {
+          fail(`autoReview/verdict ${JSON.stringify(data.reviewId)} has invalid userAuthorization ${JSON.stringify(data.userAuthorization)}`)
+        }
+        if (data.riskScore !== undefined
+          && (typeof data.riskScore !== 'number' || !Number.isInteger(data.riskScore)
+            || data.riskScore < 0 || data.riskScore > 100)) {
+          fail(`autoReview/verdict ${JSON.stringify(data.reviewId)} has invalid riskScore ${JSON.stringify(data.riskScore)}`)
         }
         if (data.riskLevel !== undefined && !RISK_LEVELS.includes(data.riskLevel)) {
           fail(`autoReview/verdict ${JSON.stringify(data.reviewId)} has invalid riskLevel ${JSON.stringify(data.riskLevel)}`)

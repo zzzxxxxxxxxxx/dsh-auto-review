@@ -84,8 +84,12 @@ function verdictBadge(
  * @returns the header button with its portalled popover.
  */
 export function ReviewPanel({ useProjection, approve, setEnabled, t }: ReviewPanelProps): ReactNode {
-  const readProjection = useProjection as unknown as (unit: 'autoReview') => AutoReviewProjection | undefined
-  const value = readProjection('autoReview')
+  // The seat is optional across harness lines: calling it unconditionally
+  // throws `useProjection is not a function` and takes the whole header down.
+  const readProjection = typeof useProjection === 'function'
+    ? useProjection as unknown as (unit: 'autoReview') => AutoReviewProjection | undefined
+    : undefined
+  const value = readProjection?.('autoReview')
   const [open, setOpen] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [position, setPosition] = useState<PanelPosition | null>(null)

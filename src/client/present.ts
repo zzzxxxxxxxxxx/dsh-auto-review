@@ -47,7 +47,13 @@ export function presentVerdict(
       tone: 'escalation',
     }
   }
-  const label = verdict.decision === 'deny' ? labels.deny : labels.allow
+  // Risk and authorization are what separates "denied because dangerous" from
+  // "denied because unconfirmed"; the row used to read identically for both.
+  const risk = verdict.riskLevel === undefined
+    ? ''
+    : ` · ${verdict.riskLevel}${verdict.riskScore === undefined ? '' : ` ${String(verdict.riskScore)}`}`
+  const authorization = verdict.userAuthorization === undefined ? '' : ` · auth ${verdict.userAuthorization}`
+  const label = `${verdict.decision === 'deny' ? labels.deny : labels.allow}${risk}${authorization}`
   return {
     reviewId: verdict.reviewId,
     toolName: verdict.toolName,

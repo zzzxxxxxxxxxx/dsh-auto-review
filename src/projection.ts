@@ -12,6 +12,7 @@ import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
 import type { SessionEvent, SessionEventMap, SessionHeader } from '@deepseek-ai/dsh-session'
 import type { AutoReviewDenyView, AutoReviewProjection, AutoReviewProjectionState, AutoReviewVerdictView } from './projection-types.ts'
 import { auditEventTypeOf } from './audit.ts'
+import { isDenial } from './events.ts'
 
 /** How many verdict rows the panel carries. */
 const RECENT_CAP = 8
@@ -163,15 +164,15 @@ export function applyAutoReview(state: AutoReviewProjectionState, event: Session
       const data = event.data
       const decision = data.decision !== undefined
       const failure = data.fallback !== undefined && data.fallback !== 'cancelled'
-      const denial = data.decision === 'deny' || data.escalation === 'risk-policy'
+      const denial = !failure && isDenial(data)
       const row = verdictView(data, event.time)
       return {
         ...state,
         verdictsUsed: state.turnOpen && decision ? state.verdictsUsed + 1 : state.verdictsUsed,
         failuresUsed: state.turnOpen && failure ? state.failuresUsed + 1 : state.failuresUsed,
-        allows: state.allows + (data.decision === 'allow' ? 1 : 0),
-        denies: state.denies + (data.decision === 'deny' ? 1 : 0),
-        fallbacks: state.fallbacks + (decision ? 0 : 1),
+        allows: state.allows + (!failure && data.decision === 'allow' && !denial ? 1 : 0),
+        denies: state.denies + (denial ? 1 : 0),
+        fallbacks: state.fallbacks + (failure || !decision ? 1 : 0),
         cacheHits: state.cacheHits + (data.cached === true ? 1 : 0),
         durationSum: state.durationSum + (decision ? data.durationMs : 0),
         decided: state.decided + (decision ? 1 : 0),

@@ -417,9 +417,10 @@ export function autoReviewFailuresInOpenTurn(events: readonly SessionEvent[]): n
  * @returns true when the request was denied.
  */
 export function isDenial(data: SessionEventMap['autoReview/verdict']): boolean {
-  // A risk-policy escalation that delegated to the human chain is NOT a denial:
-  // counting it as one trips the breaker and fills the approve list with calls
-  // the user was merely asked about.
+  // Three records have to stay apart: a reviewer denial, a risk-policy
+  // escalation that delegated to the human chain, and a review FAILURE (which
+  // also stores outcome 'rejected'). Only the first is a denial.
+  if (data.fallback !== undefined) return false
   return data.decision === 'deny' || data.outcome === 'rejected'
 }
 
@@ -566,8 +567,13 @@ export function reviewStats(events: readonly SessionEvent[]): ReviewStats {
     }
     if (event.type !== 'autoReview/verdict') continue
     const data = event.data
-    if (data.decision === 'allow') allows += 1
-    else if (data.decision === 'deny') denies += 1
+    // One predicate for every reader: a critical verdict is recorded as
+    // outcome 'rejected' while its decision still says 'allow', and counting by
+    // `decision` alone reported it as an allow the panel never showed.
+    const failure = data.fallback !== undefined && data.fallback !== 'cancelled'
+    if (failure) fallbacks += 1
+    else if (isDenial(data)) denies += 1
+    else if (data.decision === 'allow') allows += 1
     else fallbacks += 1
     if (data.decision !== undefined) {
       decided += 1
