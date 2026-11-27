@@ -770,6 +770,7 @@ export class AutoReviewRuntime {
             decision: resolution.decision,
             reason: resolution.reason,
             ...resolution.riskLevel !== undefined ? { riskLevel: resolution.riskLevel } : {},
+            ...resolution.riskScore !== undefined ? { riskScore: resolution.riskScore } : {},
           }, started)
         }
       }
@@ -781,9 +782,14 @@ export class AutoReviewRuntime {
       return this.finish(request, approvalId, resolution, next, durationMs, receipt)
     }
     const reviewId = newVerdictId()
-    const overridden = resolution.decision === 'allow'
-      && resolution.riskLevel !== undefined
+    // Codex's guardian gates an allow on a numeric risk score; the level cap
+    // stays as the fallback for verdicts that carry no score (Phocinae and
+    // cached verdicts written before the score existed).
+    const scoreOver = resolution.riskScore !== undefined
+      && resolution.riskScore >= this.config.riskPolicy.autoAllowScore
+    const levelOver = resolution.riskLevel !== undefined
       && riskExceeds(resolution.riskLevel, this.config.riskPolicy.maxAutoAllow)
+    const overridden = resolution.decision === 'allow' && (scoreOver || levelOver)
     const outcome: ApprovalOutcome | undefined = overridden
       ? this.config.riskPolicy.onHighRisk === 'deny' ? 'rejected' : undefined
       : resolution.decision === 'allow' ? 'allowed-once' : 'rejected'
@@ -858,7 +864,7 @@ export class AutoReviewRuntime {
         request.callId,
         request.toolName,
         reviewId,
-        `${resolution.reason} (risk ${resolution.riskLevel} exceeds the configured maxAutoAllow ${this.config.riskPolicy.maxAutoAllow}; the allow verdict was overridden)`,
+        `${resolution.reason} (risk score ${String(resolution.riskScore ?? 'unscored')} / level ${String(resolution.riskLevel ?? 'unset')} exceeds the configured auto-allow policy; the allow verdict was overridden)`,
       )
       const circuitTriggered = this.checkCircuit(request)
       if (receipt !== undefined) {

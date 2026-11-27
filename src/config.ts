@@ -167,7 +167,24 @@ export interface ContextBudgetConfig {
  * prompt tokens and widens what a non-default `reviewerModel` is shown, and
  * `maxChars` bounds it either way.
  */
-export const DEFAULT_CONTEXT_TURNS = 2
+export const DEFAULT_CONTEXT_TURNS = 8
+
+/**
+ * Default {@link ContextBudgetConfig.maxChars}: the reviewer's whole transcript
+ * budget in characters (≈12k tokens at 4 chars/token). The Codex guardian runs
+ * a 128k-TOKEN input budget across a dozen elastic sections; matching that
+ * literally would send ~500k characters on every approval, so this plugin
+ * spends a fixed character budget split between the message and tool sections
+ * instead. Raise it when reviews miss evidence; every review pays for it.
+ */
+export const DEFAULT_CONTEXT_CHARS = 48_000
+
+/**
+ * Default {@link RiskPolicyConfig.autoAllowScore}: the Codex guardian's MVP
+ * threshold (it auto-approved only when `risk_score < 80`). An allow verdict at
+ * or above this score is handled by {@link RiskPolicyConfig.onHighRisk}.
+ */
+export const DEFAULT_AUTO_ALLOW_SCORE = 80
 
 /** What a tripped rejection circuit breaker does to later ai-policy requests in the turn. */
 export type CircuitAction = 'delegate' | 'reject' | 'abort-turn'
@@ -197,6 +214,15 @@ export interface CircuitBreakerConfig {
 export interface RiskPolicyConfig {
   /** The highest risk level an allow verdict may settle with. */
   readonly maxAutoAllow: RiskLevel
+  /**
+   * Highest reviewer risk score (0-100) an allow verdict may settle with.
+   * The generative reviewer reports a score the way the Codex guardian does;
+   * an allow at or above this threshold is never auto-approved and follows
+   * {@link onHighRisk} instead. Ignored when the verdict carries no score
+   * (the Phocinae backend and older cached verdicts), where
+   * {@link maxAutoAllow} alone decides.
+   */
+  readonly autoAllowScore: number
   /** What happens to an allow verdict above the cap. */
   readonly onHighRisk: 'delegate' | 'deny'
 }
@@ -430,7 +456,7 @@ export const Config: z<Config> = z.object({
   contextBudget: z.object({
     turns: z.number().default(DEFAULT_CONTEXT_TURNS),
     maxChars: z.number().default(4000),
-  }).default({ turns: DEFAULT_CONTEXT_TURNS, maxChars: 4000 }),
+  }).default({ turns: DEFAULT_CONTEXT_TURNS, maxChars: DEFAULT_CONTEXT_CHARS }),
   images: z.object({
     enabled: z.boolean().default(DEFAULT_IMAGES.enabled),
     maxCount: z.number().default(DEFAULT_IMAGES.maxCount),
@@ -438,8 +464,9 @@ export const Config: z<Config> = z.object({
   }).default({ ...DEFAULT_IMAGES }),
   riskPolicy: z.object({
     maxAutoAllow: RISK.default('high'),
+    autoAllowScore: z.number().default(DEFAULT_AUTO_ALLOW_SCORE),
     onHighRisk: z.union(['delegate', 'deny'] as const).default('delegate'),
-  }).default({ maxAutoAllow: 'high', onHighRisk: 'delegate' }),
+  }).default({ maxAutoAllow: 'high', autoAllowScore: DEFAULT_AUTO_ALLOW_SCORE, onHighRisk: 'delegate' }),
   circuitBreaker: z.object({
     consecutiveDenies: z.number().default(3),
     // The window defaults must stay reachable under the default
@@ -577,7 +604,11 @@ export function resolveConfig(config: Config = {}): ResolvedConfig {
   if (!Number.isSafeInteger(turns) || turns < 0) {
     throw new TypeError(`contextBudget.turns must be a non-negative safe integer, got ${String(turns)}`)
   }
-  const contextChars = config.contextBudget?.maxChars ?? 4000
+  const autoAllowScore = config.riskPolicy?.autoAllowScore ?? DEFAULT_AUTO_ALLOW_SCORE
+  if (!Number.isSafeInteger(autoAllowScore) || autoAllowScore < 0 || autoAllowScore > 100) {
+    throw new TypeError(`riskPolicy.autoAllowScore must be an integer within 0..100, got ${String(autoAllowScore)}`)
+  }
+  const contextChars = config.contextBudget?.maxChars ?? DEFAULT_CONTEXT_CHARS
   if (!Number.isSafeInteger(contextChars) || contextChars <= 0) {
     throw new TypeError(`contextBudget.maxChars must be a positive safe integer, got ${String(contextChars)}`)
   }
@@ -666,6 +697,7 @@ export function resolveConfig(config: Config = {}): ResolvedConfig {
     },
     riskPolicy: {
       maxAutoAllow: config.riskPolicy?.maxAutoAllow ?? 'high',
+      autoAllowScore,
       onHighRisk: config.riskPolicy?.onHighRisk ?? 'delegate',
     },
     circuitBreaker: {

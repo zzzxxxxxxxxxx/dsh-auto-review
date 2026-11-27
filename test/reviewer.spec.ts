@@ -50,6 +50,7 @@ function promptConfig(overrides: Partial<ResolvedConfig> = {}): ResolvedConfig {
   return {
     enableByDefault: true,
     toolsPolicy: { default: 'human', overrides: {} },
+    images: { enabled: true, maxCount: 4, maxBytes: 8 * 1024 * 1024 },
     riskRules: [],
     reviewerProvider: 'fork',
     reviewerModel: undefined,
@@ -67,7 +68,7 @@ function promptConfig(overrides: Partial<ResolvedConfig> = {}): ResolvedConfig {
     reviewerPolicyText: undefined,
     denyGuidance: 'do not bypass',
     contextBudget: { turns: 0, maxChars: 4000 },
-    riskPolicy: { maxAutoAllow: 'high', onHighRisk: 'delegate' },
+    riskPolicy: { maxAutoAllow: 'high', autoAllowScore: 80, onHighRisk: 'delegate' },
     circuitBreaker: { consecutiveDenies: 3, windowDenies: 10, windowSize: 50, action: 'delegate' },
     overrideTtlMs: 300_000,
     verdictCacheTtlMs: 60_000,
@@ -94,6 +95,7 @@ describe('reviewer prompt', () => {
     }, {
       enableByDefault: true,
       toolsPolicy: { default: 'human', overrides: {} },
+      images: { enabled: true, maxCount: 4, maxBytes: 8 * 1024 * 1024 },
       riskRules: [{ pattern: 'killall', regex: /killall/u, policy: 'never', field: 'reason' }],
       reviewerProvider: 'fork',
       reviewerModel: undefined,
@@ -111,7 +113,7 @@ describe('reviewer prompt', () => {
       reviewerPolicyText: undefined,
       denyGuidance: 'do not bypass',
       contextBudget: { turns: 0, maxChars: 4000 },
-      riskPolicy: { maxAutoAllow: 'high', onHighRisk: 'delegate' },
+      riskPolicy: { maxAutoAllow: 'high', autoAllowScore: 80, onHighRisk: 'delegate' },
       circuitBreaker: { consecutiveDenies: 3, windowDenies: 10, windowSize: 50, action: 'delegate' },
       overrideTtlMs: 300_000,
       verdictCacheTtlMs: 60_000,
@@ -124,7 +126,11 @@ describe('reviewer prompt', () => {
     expect(prompt).toContain(`Workspace: ${WORKSPACE}`)
     expect(prompt).toContain('/killall/u → never')
     expect(prompt).toContain('structured_output')
-    expect(prompt).toContain('When unsure, DENY')
+    // Codex-parity: the verdict carries a numeric risk score, and the plugin
+    // gates an allow on riskPolicy.autoAllowScore instead of a blanket deny.
+    expect(prompt).toContain('riskScore: an integer 0-100')
+    expect(prompt).toContain('"riskScore": <0-100>')
+    expect(prompt).not.toContain('When unsure, DENY')
   })
 
   it('truncates the request reason to the shared budget', () => {
@@ -142,6 +148,7 @@ describe('reviewer prompt', () => {
     }, {
       enableByDefault: true,
       toolsPolicy: { default: 'human', overrides: {} },
+      images: { enabled: true, maxCount: 4, maxBytes: 8 * 1024 * 1024 },
       riskRules: [],
       reviewerProvider: 'fork',
       reviewerModel: undefined,
@@ -159,7 +166,7 @@ describe('reviewer prompt', () => {
       reviewerPolicyText: undefined,
       denyGuidance: 'do not bypass',
       contextBudget: { turns: 0, maxChars: 4000 },
-      riskPolicy: { maxAutoAllow: 'high', onHighRisk: 'delegate' },
+      riskPolicy: { maxAutoAllow: 'high', autoAllowScore: 80, onHighRisk: 'delegate' },
       circuitBreaker: { consecutiveDenies: 3, windowDenies: 10, windowSize: 50, action: 'delegate' },
       overrideTtlMs: 300_000,
       verdictCacheTtlMs: 60_000,
