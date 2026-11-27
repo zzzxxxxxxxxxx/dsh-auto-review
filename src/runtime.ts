@@ -378,20 +378,28 @@ export class AutoReviewRuntime {
    */
   private appendAuditRecord(session: Session, kind: string, data: unknown): unknown {
     const append = loadAppendPluginRecord()
-    if (append === null) {
-      return (session.append as unknown as (type: string, data: unknown, options: { ignorable: boolean }) => unknown)(
-        `autoReview/${kind}`,
-        data,
-        { ignorable: true },
-      )
-    }
-    const type = auditRecordEventType(kind)
+    const type = append === null ? `autoReview/${kind}` : auditRecordEventType(kind)
     try {
+      if (append === null) {
+        return (session.append as unknown as (t: string, d: unknown, o: { ignorable: boolean }) => unknown)(
+          type,
+          data,
+          { ignorable: true },
+        )
+      }
       append(session, type, data)
       // The host stamped the envelope; mirror its shape so the probe sees the marker.
       return { type, ignorable: true }
     } catch (error) {
-      this.ctx.logger.warn(`auto-review: the host refused the ${type} audit record, so it was dropped (${String(error)})`)
+      // A refused append must not leave the runtime believing the log still
+      // backs its state: budgets, the circuit breaker and `/auto-review
+      // approve` read those records back. Degrade to the in-memory mirror and
+      // say so once, instead of dropping records and reporting health.
+      if (this.auditSupport !== 'unsupported') {
+        this.auditSupport = 'unsupported'
+        this.warnUnmarkedAuditHost()
+      }
+      this.ctx.logger.warn(`auto-review: the host refused the ${type} audit record (${String(error)})`)
       return undefined
     }
   }
@@ -868,8 +876,16 @@ export class AutoReviewRuntime {
     // at least `minAuthorizationForHigh`; critical is never auto-approved.
     // The level cap and the numeric valve remain as fallbacks for verdicts
     // that predate the authorization dimension.
-    const authorization = resolution.userAuthorization ?? 'unknown'
-    const belowAuthorizationFloor = resolution.riskLevel === 'high'
+    const critical = resolution.riskLevel === 'critical'
+    // A human one-shot override IS the user's authorization, so it lifts the
+    // authorization floor for this single retry.
+    const authorization = override !== undefined ? 'high' : (resolution.userAuthorization ?? 'unknown')
+    // A verdict that states no level is a legacy one (the Phocinae backend and
+    // pre-authorization caches): keep the pre-table behaviour rather than
+    // escalating every call it settles. The generative reviewer always states
+    // a level, so the floor only widens coverage.
+    const level = resolution.riskLevel ?? 'low'
+    const belowAuthorizationFloor = level === 'high'
       && AUTHORIZATION_ORDER.indexOf(authorization)
         < AUTHORIZATION_ORDER.indexOf(this.config.riskPolicy.minAuthorizationForHigh)
     const levelOver = resolution.riskLevel !== undefined
@@ -877,10 +893,12 @@ export class AutoReviewRuntime {
       && riskExceeds(resolution.riskLevel, this.config.riskPolicy.maxAutoAllow)
     const scoreOver = resolution.riskScore !== undefined
       && resolution.riskScore >= this.config.riskPolicy.autoAllowScore
-    const critical = resolution.riskLevel === 'critical'
-    const overridden = resolution.decision === 'allow'
+    const overridden = resolution.decision === 'allow' && !critical
       && (belowAuthorizationFloor || levelOver || scoreOver)
-    const outcome: ApprovalOutcome | undefined = resolution.decision === 'deny' || critical
+    // A critical verdict is a denial whatever the policy says, and it must not
+    // fall through the allow settlement below.
+    const denied = resolution.decision === 'deny' || critical
+    const outcome: ApprovalOutcome | undefined = denied
       ? 'rejected'
       : overridden
         ? this.config.riskPolicy.onHighRisk === 'deny' ? 'rejected' : undefined
@@ -938,8 +956,17 @@ export class AutoReviewRuntime {
       })
     }
     if (outcome === undefined) return next()
-    if (resolution.decision === 'deny') {
-      this.recordDenyReason(request.callId, request.toolName, reviewId, resolution.reason)
+    if (denied) {
+      const reason = critical
+        ? `${resolution.reason} (critical risk: a critical verdict is never auto-approved)`
+        : resolution.decision === 'deny'
+          ? resolution.reason
+          : `${resolution.reason} (${belowAuthorizationFloor
+            ? `user authorization ${authorization} is below the configured floor ${this.config.riskPolicy.minAuthorizationForHigh}`
+            : levelOver
+              ? `risk level ${String(level)} exceeds the configured maxAutoAllow ${this.config.riskPolicy.maxAutoAllow}`
+              : `risk score ${String(resolution.riskScore ?? 'unscored')} reaches the configured auto-allow ceiling ${this.config.riskPolicy.autoAllowScore}`})`
+      this.recordDenyReason(request.callId, request.toolName, reviewId, reason)
       const circuitTriggered = this.checkCircuit(request)
       if (receipt !== undefined) {
         const circuit = this.circuitFor(request.agent.session, this.memoryFor(request.agent.session))

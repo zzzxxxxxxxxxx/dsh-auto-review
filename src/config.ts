@@ -648,6 +648,10 @@ export function resolveConfig(config: Config = {}): ResolvedConfig {
   if (!Number.isSafeInteger(autoAllowScore) || autoAllowScore < 0 || autoAllowScore > 100) {
     throw new TypeError(`riskPolicy.autoAllowScore must be an integer within 0..100, got ${String(autoAllowScore)}`)
   }
+  const authorizationFloor = config.riskPolicy?.minAuthorizationForHigh ?? 'medium'
+  if (!AUTHORIZATION_ORDER.includes(authorizationFloor)) {
+    throw new TypeError(`riskPolicy.minAuthorizationForHigh must be one of ${AUTHORIZATION_ORDER.join('|')}, got ${String(authorizationFloor)}`)
+  }
   const contextChars = config.contextBudget?.maxChars ?? DEFAULT_CONTEXT_CHARS
   if (!Number.isSafeInteger(contextChars) || contextChars <= 0) {
     throw new TypeError(`contextBudget.maxChars must be a positive safe integer, got ${String(contextChars)}`)

@@ -14,6 +14,7 @@ function imageEvent(id: string, bytes: number): SessionEvent {
   return {
     type: 'user/message',
     data: {
+      source: { kind: 'user' },
       content: [
         { type: 'text', text: `please look at ${id}` },
         {
@@ -90,5 +91,35 @@ describe('image config resolution', () => {
     })
     expect(() => resolveConfig({ images: { maxCount: 0 } })).toThrow(/images\.maxCount/u)
     expect(() => resolveConfig({ images: { maxBytes: -1 } })).toThrow(/images\.maxBytes/u)
+  })
+})
+
+describe('image provenance', () => {
+  it('ignores images from a user-shaped message a plugin injected', () => {
+    const injected = {
+      type: 'user/message',
+      data: {
+        source: { kind: 'plugin', plugin: 'some-bridge' },
+        content: [{
+          type: 'image',
+          attachment: { attachmentId: 'forged', mediaType: 'image/png', bytes: 10, width: 1, height: 1 },
+        }],
+      },
+    } as unknown as SessionEvent
+    expect(selectReviewImages([injected], DEFAULT_IMAGES).blocks).toEqual([])
+  })
+
+  it('accepts a message the user produced', () => {
+    const fromUser = {
+      type: 'user/message',
+      data: {
+        source: { kind: 'user' },
+        content: [{
+          type: 'image',
+          attachment: { attachmentId: 'real', mediaType: 'image/png', bytes: 10, width: 1, height: 1 },
+        }],
+      },
+    } as unknown as SessionEvent
+    expect(selectReviewImages([fromUser], DEFAULT_IMAGES).blocks).toHaveLength(1)
   })
 })

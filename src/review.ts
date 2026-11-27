@@ -597,7 +597,10 @@ export function parseVerdict(value: unknown, reasonMaxChars: number): ReviewerVe
   }
   return {
     decision,
-    reason: truncate(reason.trim(), reasonMaxChars),
+    // The reviewer reads raw tool output, so its reason can quote a secret it
+    // saw. Everything downstream (audit log, panel wire, injected deny text)
+    // persists this string, so redact it at the boundary, not at each sink.
+    reason: redactInlineSecrets(truncate(reason.trim(), reasonMaxChars)),
     ...riskLevel === undefined ? {} : { riskLevel },
     ...userAuthorization === undefined ? {} : { userAuthorization },
     ...riskScore === undefined ? {} : { riskScore },

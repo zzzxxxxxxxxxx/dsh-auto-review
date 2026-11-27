@@ -247,6 +247,12 @@ export function denyResultText(reviewId: AutoReviewVerdictId, toolName: string, 
  * @returns the exact error text shown to the model.
  */
 export function fallbackResultText(reviewId: AutoReviewVerdictId, fallback: AutoReviewFallback, error: string): string {
+  if (fallback === 'timeout') {
+    // Codex's TIMEOUT_INSTRUCTIONS: a missed deadline is not a risk verdict.
+    return `Error: ${FALLBACK_MARKER} review ${reviewId}: the automatic permission approval review did `
+      + 'not finish before its deadline. The call was not executed. Do not assume the action is unsafe '
+      + 'based on the timeout alone. You may retry once, or ask the user for guidance or explicit approval.'
+  }
   return `Error: ${FALLBACK_MARKER} review ${reviewId} failed (${fallback}) and the request was rejected: ${error}`
 }
 
@@ -411,7 +417,10 @@ export function autoReviewFailuresInOpenTurn(events: readonly SessionEvent[]): n
  * @returns true when the request was denied.
  */
 export function isDenial(data: SessionEventMap['autoReview/verdict']): boolean {
-  return data.decision === 'deny' || data.escalation === 'risk-policy'
+  // A risk-policy escalation that delegated to the human chain is NOT a denial:
+  // counting it as one trips the breaker and fills the approve list with calls
+  // the user was merely asked about.
+  return data.decision === 'deny' || data.outcome === 'rejected'
 }
 
 /**

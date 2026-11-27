@@ -81,7 +81,7 @@ export const name = 'auto-review-invariant'
 export const inject = ['invariants']
 
 const DECISIONS: readonly string[] = ['allow', 'deny']
-const RISK_LEVELS: readonly string[] = ['low', 'medium', 'high']
+const RISK_LEVELS: readonly string[] = ['low', 'medium', 'high', 'critical']
 const OUTCOMES: readonly string[] = ['allowed-once', 'rejected', 'cancelled', 'unavailable']
 const TRIP_KINDS: readonly string[] = ['consecutive', 'window']
 const CIRCUIT_ACTIONS: readonly string[] = ['delegate', 'reject', 'abort-turn']

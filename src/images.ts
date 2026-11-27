@@ -40,9 +40,21 @@ export interface SelectedReviewImages {
   readonly dropped: number
 }
 
-/** Narrow one event's content array to the durable image blocks it carries. */
+/** Message sources whose images count as "the user attached this". */
+const TRUSTED_IMAGE_SOURCES = new Set(['user'])
+
+/**
+ * Narrow one event's content array to the durable image blocks it carries.
+ *
+ * Only a message the USER produced qualifies. A plugin-injected `user/message`
+ * (a bridge, a mod, a replayed prompt) is user-shaped but not user-authored, and
+ * letting its images count as authorization would hand any plugin the ability to
+ * authorize a boundary crossing.
+ */
 function imageBlocksOf(event: SessionEvent): readonly ReviewImageBlock[] {
   if (event.type !== 'user/message') return []
+  const source = (event.data as { source?: { kind?: unknown } }).source
+  if (typeof source?.kind !== 'string' || !TRUSTED_IMAGE_SOURCES.has(source.kind)) return []
   const content = event.data.content as readonly ContentBlock[]
   return content.filter((block): block is ReviewImageBlock => block.type === 'image')
 }
