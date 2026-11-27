@@ -13,7 +13,9 @@ describe('auto-review runtime context', () => {
       defaultAi: false,
       aiTools: ['bash', 'edit'],
     })
-    expect(text).toContain('`approvals_reviewer` is `auto_review`')
+    expect(text).toContain('reviewed automatically by a separate reviewer')
+    // Codex's configuration keys do not exist in DSH and must not be named.
+    expect(text).not.toContain('approvals_reviewer')
     expect(text).toContain('`bash`, `edit`')
     expect(text).toContain('materially safer')
     expect(text.split('\n')).toHaveLength(3)

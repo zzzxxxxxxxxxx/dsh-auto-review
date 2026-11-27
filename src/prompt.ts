@@ -35,12 +35,13 @@ export function renderAutoReviewContext(facts: PromptFacts): string {
   const tools = facts.defaultAi
     ? 'any tool'
     : facts.aiTools.map(tool => `\`${tool}\``).join(', ')
-  // Codex's wording (`permissions_instructions.rs` AUTO_REVIEW_SUFFIX): one
-  // sentence on state, one on what to do after a rejection. Nothing about what
-  // the reviewer can see — that is the reviewer's business, not the agent's.
+  // Modelled on Codex's AUTO_REVIEW_SUFFIX (one sentence on state, one on what
+  // to do after a rejection) but in DSH's own vocabulary: `approvals_reviewer`
+  // and `auto_review` are Codex configuration keys and mean nothing here, where
+  // the same policy is a permission preset plus this plugin's tool policy.
   return [
-    `\`approvals_reviewer\` is \`auto_review\`: approval requests for ${tools} are reviewed for`,
-    'compliance with the policy. If a rejection happens, proceed only with a materially safer',
-    'alternative, or inform the user of the risk and send a final message to ask for approval.',
+    `Approval requests for ${tools} are reviewed automatically by a separate reviewer instead of`,
+    'the user. If a rejection happens, proceed only with a materially safer alternative, or inform',
+    'the user of the risk and send a final message to ask for approval.',
   ].join('\n')
 }
