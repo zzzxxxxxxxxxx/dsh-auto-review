@@ -277,8 +277,6 @@ export class AutoReviewRuntime {
       aiTools: Object.entries(this.config.toolsPolicy.overrides)
         .filter(([, policy]) => policy === 'ai')
         .map(([tool]) => tool),
-      reasonMaxChars: this.config.reasonMaxChars,
-      images: this.config.images,
     })
   }
   private disposed = false

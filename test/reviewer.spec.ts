@@ -454,7 +454,11 @@ describe('compact transcript context', () => {
       { type: 'user/message', data: { content: [{ type: 'text', text: 'a long message to truncate' }] } },
     ])
     expect(buildContextSection(session.snapshotEvents(), { turns: 0, maxChars: 1000 })).toBe('')
-    expect(buildContextSection(session.snapshotEvents(), { turns: 1, maxChars: 20 })).toMatch(/…$/u)
+    const truncated = buildContextSection(session.snapshotEvents(), { turns: 1, maxChars: 20 })
+    expect(truncated).toContain('…')
+    // Dropping evidence must be visible: a short transcript cannot pass for a
+    // complete one.
+    expect(truncated).toContain('older transcript omitted')
   })
 
   it('spends the character budget on the most recent lines, not the oldest', () => {
@@ -469,7 +473,10 @@ describe('compact transcript context', () => {
     const section = buildContextSection(session.snapshotEvents(), { turns: 1, maxChars: 60 })
     expect(section).toContain('create hello.txt in my home directory')
     expect(section).not.toContain('ancient history')
-    expect(section.length).toBeLessThanOrEqual(60)
+    // The budget covers the transcript lines; the omission marker is bookkeeping
+    // appended on top of it, so the assertion bounds the content, not the total.
+    const content = section.split('\n').filter(line => !line.startsWith('[older transcript omitted'))[0]
+    expect(content!.length).toBeLessThanOrEqual(60)
   })
 })
 

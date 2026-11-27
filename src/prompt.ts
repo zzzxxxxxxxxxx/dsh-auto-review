@@ -14,18 +14,12 @@
  * @module dsh-auto-review/prompt
  */
 
-import type { ResolvedConfig } from './config.ts'
-
 /** What one session's renderer needs from the resolved config. */
 export interface PromptFacts {
   /** Whether the default policy is `ai` (every tool is reviewed). */
   readonly defaultAi: boolean
   /** Explicitly reviewed tool names, when the default is not `ai`. */
   readonly aiTools: readonly string[]
-  /** The argument-preview cap the reviewer sees the pending call through. */
-  readonly reasonMaxChars: number
-  /** Whether user images travel to the reviewer. */
-  readonly images: ResolvedConfig['images']
 }
 
 /**
@@ -45,9 +39,8 @@ export function renderAutoReviewContext(facts: PromptFacts): string {
   // sentence on state, one on what to do after a rejection. Nothing about what
   // the reviewer can see — that is the reviewer's business, not the agent's.
   return [
-    `\`approvals_reviewer\` is \`auto_review\`: sandbox escalations requested by ${tools} with`,
-    '`sandbox_permissions` are reviewed for compliance with the policy. If a rejection happens,',
-    'proceed only with a materially safer alternative, or inform the user of the risk and send a',
-    'final message to ask for approval.',
+    `\`approvals_reviewer\` is \`auto_review\`: approval requests for ${tools} are reviewed for`,
+    'compliance with the policy. If a rejection happens, proceed only with a materially safer',
+    'alternative, or inform the user of the risk and send a final message to ask for approval.',
   ].join('\n')
 }
