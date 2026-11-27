@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { parseVerdict } from '../src/review.ts'
+import { parseVerdict, VERDICT_SCHEMA } from '../src/review.ts'
 import { resolveConfig } from '../src/index.ts'
 
 describe('risk score verdicts', () => {
@@ -22,6 +22,12 @@ describe('risk score verdicts', () => {
     for (const riskScore of [-1, 101, 12.5, '12', null]) {
       expect(parseVerdict({ decision: 'allow', reason: 'x', riskScore }, 200)).toBeUndefined()
     }
+  })
+})
+
+describe('risk score contract', () => {
+  it('requires the score in the structured verdict schema', () => {
+    expect(VERDICT_SCHEMA.required).toEqual(['decision', 'reason', 'riskScore'])
   })
 })
 

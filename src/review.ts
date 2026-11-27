@@ -78,7 +78,7 @@ export const VERDICT_SCHEMA: ObjectJsonSchema = {
     // The enforced schema subset has no numeric bounds: range-checked in parseVerdict.
     riskScore: { type: 'integer', description: 'Risk of accepting this call, 0-100.' },
   },
-  required: ['decision', 'reason'],
+  required: ['decision', 'reason', 'riskScore'],
 }
 
 // Prove at load time that the verdict schema obeys the enforced JSON-schema

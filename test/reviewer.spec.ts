@@ -217,7 +217,7 @@ describe('verdict schema and parsing', () => {
   it('declares an object-rooted schema with the closed vocabularies', () => {
     expect(VERDICT_SCHEMA).toMatchObject({
       type: 'object',
-      required: ['decision', 'reason'],
+      required: ['decision', 'reason', 'riskScore'],
     })
   })
 
