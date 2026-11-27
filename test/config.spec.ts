@@ -61,7 +61,7 @@ describe('config resolution', () => {
 
   it('defaults the Phase B tunables conservatively', () => {
     const resolved = resolveConfig()
-    expect(resolved.denyGuidance).toContain('Do not attempt')
+    expect(resolved.denyGuidance).toContain('policy circumvention')
     expect(resolved.contextBudget).toEqual({ turns: DEFAULT_CONTEXT_TURNS, maxChars: DEFAULT_CONTEXT_CHARS })
     expect(resolved.riskPolicy).toEqual({
       maxAutoAllow: 'high',

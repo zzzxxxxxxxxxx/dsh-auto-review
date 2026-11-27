@@ -299,6 +299,13 @@ export function plainDenyResultText(toolName: string, reason: string): string {
  * @returns the exact error text shown to the model.
  */
 export function plainFallbackResultText(fallback: AutoReviewFallback, error: string): string {
+  // Codex's TIMEOUT_INSTRUCTIONS: a review deadline is not evidence of danger,
+  // so the model is told not to treat the rejection as a risk verdict.
+  if (fallback === 'timeout') {
+    return 'Error: the automatic permission approval review did not finish before its deadline. '
+      + 'The call was not executed. Do not assume the action is unsafe based on the timeout alone. '
+      + 'You may retry once, or ask the user for guidance or explicit approval.'
+  }
   return `Error: the AI reviewer failed (${fallback}) and the request was rejected: ${error}`
 }
 

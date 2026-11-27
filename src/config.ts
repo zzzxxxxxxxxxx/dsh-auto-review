@@ -447,8 +447,10 @@ const CIRCUIT_ACTION = z.union(['delegate', 'reject', 'abort-turn'] as const)
 const REVIEWER_BACKEND = z.union(['agent', 'phocinae'] as const)
 
 /** Default anti-circumvention guidance appended to every injected deny reason. */
-export const DEFAULT_DENY_GUIDANCE = 'Do not attempt to work around this denial. '
-  + 'Choose a materially safer alternative that stays inside your permissions, or ask the user before retrying this action.'
+export const DEFAULT_DENY_GUIDANCE =
+  'The agent must not attempt to achieve the same outcome via workaround, indirect execution, or '
+  + 'policy circumvention. Proceed only with a materially safer alternative, or if the user explicitly '
+  + 'approves the action after being informed of the risk. Otherwise, stop and request user input.'
 
 /** Schemastery schema: the loader validates and fills defaults before `apply`. */
 export const Config: z<Config> = z.object({

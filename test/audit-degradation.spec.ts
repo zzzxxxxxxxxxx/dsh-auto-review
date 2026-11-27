@@ -72,7 +72,7 @@ describe('audit-disabled degradation (rc.6 host)', () => {
     const feedback = (decision as { feedback: { text: string }[] }).feedback
     expect(feedback[0]!.text).toContain('destructive')
     expect(feedback[0]!.text).not.toMatch(/\[auto-review/u)
-    expect(feedback[0]!.text).toContain('Do not attempt to work around this denial')
+    expect(feedback[0]!.text).toContain('must not attempt to achieve the same outcome')
   })
 
   it('reports the disabled-audit notice in /auto-review status', async () => {

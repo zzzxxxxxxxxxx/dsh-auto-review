@@ -209,7 +209,7 @@ describe('auto-review answerer', () => {
     expect(feedback[0]!.text).toMatch(NEVER_MARKER_PATTERN)
     expect(feedback[0]!.text).toContain(`rejection ${String(dataOf(rejection).rejectionId)}`)
     expect(feedback[0]!.text).toContain('hard-disabled tool "bash"')
-    expect(feedback[0]!.text).toContain('Do not attempt to work around this denial')
+    expect(feedback[0]!.text).toContain('must not attempt to achieve the same outcome')
   })
 
   it('names the matched risk rule in the never-rejection audit', async () => {
@@ -697,7 +697,7 @@ describe('auto-review answerer', () => {
     }, async () => ({ kind: 'accept' }))
     const feedback = (decision as { feedback: { text: string }[] }).feedback
     expect(feedback[0]!.text).toMatch(DENY_MARKER_PATTERN)
-    expect(feedback[0]!.text).toContain('Do not attempt')
+    expect(feedback[0]!.text).toContain('policy circumvention')
   })
 
   it('still allows a low-risk verdict under a tightened risk cap', async () => {

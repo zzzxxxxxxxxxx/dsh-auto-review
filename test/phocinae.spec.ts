@@ -520,7 +520,7 @@ describe('phocinae answerer integration', () => {
     }, async () => ({ kind: 'accept' }))
     const feedback = (decision as { feedback: { text: string }[] }).feedback
     expect(feedback[0]!.text).toContain('phocinae')
-    expect(feedback[0]!.text).toContain('Do not attempt')
+    expect(feedback[0]!.text).toContain('policy circumvention')
   })
 
   it('escalates a risky verdict through the fallback policy', async () => {
