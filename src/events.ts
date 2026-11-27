@@ -49,6 +49,8 @@ declare module '@deepseek-ai/dsh-session/types' {
       decision?: 'allow' | 'deny'
       reason?: string
       riskLevel?: RiskLevel
+      /** The reviewer's numeric risk score (0-100), when it reported one. */
+      riskScore?: number
       outcome?: ApprovalOutcome
       fallback?: AutoReviewFallback
       error?: string

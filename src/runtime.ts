@@ -864,6 +864,7 @@ export class AutoReviewRuntime {
         decision: resolution.decision,
         reason: resolution.reason,
         ...resolution.riskLevel !== undefined ? { riskLevel: resolution.riskLevel } : {},
+        ...resolution.riskScore !== undefined ? { riskScore: resolution.riskScore } : {},
         ...overridden ? { escalation: 'risk-policy' } : {},
         ...outcome !== undefined ? { outcome } : {},
         ...cached ? { cached: true } : {},

@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseVerdict, VERDICT_SCHEMA } from '../src/review.ts'
 import { resolveConfig } from '../src/index.ts'
+import { applyAutoReview, initAutoReviewProjection, viewAutoReview } from '../src/projection.ts'
 
 describe('risk score verdicts', () => {
   it('accepts an integer score alongside the decision', () => {
@@ -42,5 +43,27 @@ describe('auto-allow score config', () => {
     for (const autoAllowScore of [-1, 101, 12.5]) {
       expect(() => resolveConfig({ riskPolicy: { autoAllowScore } })).toThrow(/autoAllowScore/u)
     }
+  })
+})
+
+describe('risk score in the audit view', () => {
+  it('carries the score into the projection view (the wire schema bounds it)', () => {
+    const event = (riskScore: unknown): never => ({
+      type: 'autoReview/verdict',
+      seq: 0,
+      time: 0,
+      data: {
+        reviewId: 'r1',
+        approvalId: 'a1',
+        toolName: 'bash',
+        provider: 'fork',
+        durationMs: 5,
+        decision: 'deny',
+        reason: 'no',
+        riskScore,
+      },
+    }) as never
+    const folded = applyAutoReview(initAutoReviewProjection(true, 's1'), event(73))
+    expect(viewAutoReview(folded).recent[0]).toMatchObject({ riskScore: 73 })
   })
 })
