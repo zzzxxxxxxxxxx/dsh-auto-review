@@ -28,6 +28,7 @@ import { hasAiPolicy, resolveConfig, riskExceeds } from './config.ts'
 import type { Config, ResolvedConfig, ToolReviewPolicy } from './config.ts'
 import { guardReviewerContext, ReviewerChildren } from './isolation.ts'
 import { messages } from './messages.ts'
+import { renderAutoReviewContext } from './prompt.ts'
 import { makeAutoReviewProjection, viewAutoReview } from './projection.ts'
 import type { AutoReviewProjection, AutoReviewProjectionState } from './projection-types.ts'
 import {
@@ -234,6 +235,52 @@ function policyFor(config: ResolvedConfig, request: ApprovalRequest, argumentsTe
  * teardown effect that clears the pending circuit-breaker timers.
  */
 export class AutoReviewRuntime {
+  /**
+   * Publish the active auto-review policy as main-agent runtime context.
+   *
+   * The plugin settles approvals outside the model's view, so the main agent
+   * would otherwise write escalation justifications for a human reader and
+   * retry around denials. The contribution is ordered onto the host's
+   * APPROVAL_POLICY slot and is empty for reviewer children, disabled
+   * sessions, and compositions with no `ai` tool.
+   */
+  registerPromptContext(): void {
+    if (this.ctx.get('systemPrompt') === undefined) return
+    this.ctx.inject(['systemPrompt'], scope => {
+      scope.systemPrompt.context({
+        name: 'auto-review:policy',
+        order: scope.systemPrompt.getContextOrder('APPROVAL_POLICY'),
+        text: context => this.promptContextText(context.agent),
+      })
+    })
+  }
+
+  /**
+   * The rendered context for one agent, or an empty string when auto review
+   * does not apply: a reviewer child, a session with the switch off, or a
+   * composition whose every policy is `human`/`never`.
+   * @param agent - the agent whose step is being assembled.
+   * @returns the context text.
+   */
+  promptContextText(agent: Agent | undefined): string {
+    if (agent === undefined) return ''
+    if (this.reviewerSessions.has(agent.id)) return ''
+    const session = agent.session
+    const memory = this.memoryFor(session)
+    const enabled = effectiveAutoReviewState(sessionEvents(session))
+      ?? memory.enabledOverride
+      ?? this.config.enableByDefault
+    if (!enabled) return ''
+    if (!hasAiPolicy(this.config)) return ''
+    return renderAutoReviewContext({
+      defaultAi: this.config.toolsPolicy.default === 'ai',
+      aiTools: Object.entries(this.config.toolsPolicy.overrides)
+        .filter(([, policy]) => policy === 'ai')
+        .map(([tool]) => tool),
+      reasonMaxChars: this.config.reasonMaxChars,
+      images: this.config.images,
+    })
+  }
   private disposed = false
   /**
    * Live reviewer children — their approval asks never re-enter AI review,
@@ -1387,6 +1434,7 @@ export function apply(ctx: Context, config: Config): void {
     input: { hint: 'on|off|status|approve [n]' },
     handler: invocation => runtime.command(invocation),
   })
+  runtime.registerPromptContext()
   if (ctx.get('sessionProjections') !== undefined) {
     ctx.inject(['sessionProjections'], scope => scope.sessionProjections.register(
       makeAutoReviewProjection(resolved.enableByDefault, state => runtime.livePanelView(state)),

@@ -4,6 +4,8 @@
 
 ### Added
 
+- **The main agent is told that a reviewer, not the user, decides its escalations.** The plugin settles approvals outside the model's view, so the calling agent wrote `justification` text for a human reader, described boundary crossings as "tests", and retried around denials with other tools. A runtime-context section now states, while auto review is active: which tools are AI-reviewed, that the reviewer sees the transcript, the redacted and truncated pending arguments and (when enabled) the user's attached images but never the agent's reasoning, how to write a justification that can be approved, that only user text or user images authorize, and that a denial must not be worked around. The section is empty for reviewer children, for sessions with the switch off, and for compositions where every policy is `human`/`never`, and it sits on the host's APPROVAL_POLICY context order next to the existing approval sentence.
+
 - **Risk scores gate an allow, the way the Codex guardian scores approvals.** The reviewer now reports `riskScore` (0-100) next to its decision, and `riskPolicy.autoAllowScore` (default **80**, the guardian MVP's `risk_score < 80` threshold) decides whether an allow may settle the request: a score at or above it is escalated per `onHighRisk` instead of being auto-approved. The blanket `When unsure, DENY` rule is gone — insufficient or ambiguous evidence now raises the score rather than collapsing straight to a denial, which is what made the reviewer refuse ordinary authorized work. Scoreless verdicts (the Phocinae backend, cached verdicts written before the score existed) keep the level cap (`riskPolicy.maxAutoAllow`) as the only gate.
 
 ### Changed
