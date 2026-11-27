@@ -491,6 +491,8 @@ export function buildReviewPrompt(
     '  more. An allow at or above the configured auto-allow threshold is escalated rather than',
     '  settled, so score the damage, not your confidence in guessing it.',
     '- truncated evidence counts as insufficient: when the arguments are marked TRUNCATED, deny.',
+    '- riskScore is mandatory: a verdict without an integer riskScore is invalid and will be',
+    '  rejected by the host, so always report it alongside decision and reason.',
     '- riskLevel: low / medium / high, your overall confidence-weighted severity.',
     '',
     verdictChannel === 'structured_output'
