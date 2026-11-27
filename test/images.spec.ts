@@ -54,14 +54,14 @@ describe('reviewer image selection', () => {
 
   it('drops an image whose bytes would exceed the byte cap but keeps smaller older ones', () => {
     const events = [imageEvent('small-1', 100), imageEvent('huge', 5000), imageEvent('small-2', 100)]
-    const selected = selectReviewImages(events, { enabled: true, maxCount: 4, maxBytes: 250 })
+    const selected = selectReviewImages(events, { maxCount: 4, maxBytes: 250 })
     expect(selected.blocks.map(block => block.attachment.attachmentId)).toEqual(['small-1', 'small-2'])
     expect(selected.dropped).toBe(1)
   })
 
-  it('selects nothing when images are disabled', () => {
+  it('selects nothing when the count cap is zero (the text-only setting)', () => {
     const events = [imageEvent('img-1', 1000)]
-    expect(selectReviewImages(events, { ...DEFAULT_IMAGES, enabled: false })).toEqual({
+    expect(selectReviewImages(events, { ...DEFAULT_IMAGES, maxCount: 0 })).toEqual({
       blocks: [],
       dropped: 0,
     })
@@ -80,16 +80,17 @@ describe('reviewer image selection', () => {
 
 describe('image config resolution', () => {
   it('defaults to forwarding up to four images inside 8 MiB', () => {
-    expect(resolveConfig().images).toEqual({ enabled: true, maxCount: 4, maxBytes: 8 * 1024 * 1024 })
+    expect(resolveConfig().images).toEqual({ maxCount: 4, maxBytes: 8 * 1024 * 1024 })
   })
 
   it('accepts overrides and rejects non-positive caps', () => {
-    expect(resolveConfig({ images: { enabled: false, maxCount: 2, maxBytes: 1024 } }).images).toEqual({
-      enabled: false,
+    expect(resolveConfig({ images: { maxCount: 2, maxBytes: 1024 } }).images).toEqual({
       maxCount: 2,
       maxBytes: 1024,
     })
-    expect(() => resolveConfig({ images: { maxCount: 0 } })).toThrow(/images\.maxCount/u)
+    // 0 is the text-only setting; a negative cap is a configuration error.
+    expect(resolveConfig({ images: { maxCount: 0 } }).images.maxCount).toBe(0)
+    expect(() => resolveConfig({ images: { maxCount: -1 } })).toThrow(/images\.maxCount/u)
     expect(() => resolveConfig({ images: { maxBytes: -1 } })).toThrow(/images\.maxBytes/u)
   })
 })
@@ -121,5 +122,17 @@ describe('image provenance', () => {
       },
     } as unknown as SessionEvent
     expect(selectReviewImages([fromUser], DEFAULT_IMAGES).blocks).toHaveLength(1)
+  })
+})
+
+describe('text-only route memory', () => {
+  it('learns and forgets a route that rejected images', async () => {
+    const { isTextOnlyRoute, markRouteTextOnly, resetTextOnlyRoutes } = await import('../src/images.ts')
+    resetTextOnlyRoutes()
+    expect(isTextOnlyRoute('k')).toBe(false)
+    markRouteTextOnly('k')
+    expect(isTextOnlyRoute('k')).toBe(true)
+    resetTextOnlyRoutes()
+    expect(isTextOnlyRoute('k')).toBe(false)
   })
 })

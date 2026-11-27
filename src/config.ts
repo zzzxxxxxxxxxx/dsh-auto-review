@@ -492,7 +492,9 @@ export const Config: z<Config> = z.object({
     maxChars: z.number().default(DEFAULT_CONTEXT_CHARS),
   }).default({ turns: DEFAULT_CONTEXT_TURNS, maxChars: DEFAULT_CONTEXT_CHARS }),
   images: z.object({
-    enabled: z.boolean().default(DEFAULT_IMAGES.enabled),
+    // `maxCount: 0` is the text-only setting; there is no separate switch,
+    // because whether images can be forwarded at all is a property of the
+    // reviewer route, not of the deployment.
     maxCount: z.number().default(DEFAULT_IMAGES.maxCount),
     maxBytes: z.number().default(DEFAULT_IMAGES.maxBytes),
   }).default({ ...DEFAULT_IMAGES }),
@@ -657,8 +659,8 @@ export function resolveConfig(config: Config = {}): ResolvedConfig {
     throw new TypeError(`contextBudget.maxChars must be a positive safe integer, got ${String(contextChars)}`)
   }
   const imageCount = config.images?.maxCount ?? DEFAULT_IMAGES.maxCount
-  if (!Number.isSafeInteger(imageCount) || imageCount <= 0) {
-    throw new TypeError(`images.maxCount must be a positive safe integer, got ${String(imageCount)}`)
+  if (!Number.isSafeInteger(imageCount) || imageCount < 0) {
+    throw new TypeError(`images.maxCount must be a non-negative safe integer, got ${String(imageCount)}`)
   }
   const imageBytes = config.images?.maxBytes ?? DEFAULT_IMAGES.maxBytes
   if (!Number.isSafeInteger(imageBytes) || imageBytes <= 0) {
@@ -734,11 +736,7 @@ export function resolveConfig(config: Config = {}): ResolvedConfig {
     reviewerPolicyText: config.reviewerPolicyText,
     denyGuidance: config.denyGuidance ?? DEFAULT_DENY_GUIDANCE,
     contextBudget: { turns, maxChars: contextChars },
-    images: {
-      enabled: config.images?.enabled ?? DEFAULT_IMAGES.enabled,
-      maxCount: imageCount,
-      maxBytes: imageBytes,
-    },
+    images: { maxCount: imageCount, maxBytes: imageBytes },
     riskPolicy: {
       maxAutoAllow: config.riskPolicy?.maxAutoAllow ?? 'high',
       autoAllowScore,

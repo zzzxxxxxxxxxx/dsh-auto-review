@@ -10,6 +10,9 @@
 
 ### Changed
 
+- **Image forwarding follows the reviewer route instead of a config switch.** `images.enabled` is gone: whether a reviewer can take an image is a property of the model, not of the deployment. `images.maxCount: 0` is the explicit text-only setting; otherwise the first review that fails on a route which rejects image input retries once without images and remembers that route as text-only for the process (with a one-time warning). That keeps a text-only reviewer usable — previously every review on such a route failed and the fail-closed fallback denied every call.
+
+
 - **The main agent's instructions now use the Codex auto-review wording.** The runtime context became Codex's one-sentence shape: `approvals_reviewer` is `auto_review`, approval requests for the listed tools are reviewed for policy compliance, and after a rejection the agent proceeds only with a materially safer alternative or asks the user. Two feedback texts follow the same source: a denied call appends Codex's rejection instructions (no workaround, no indirect execution, no policy circumvention) instead of the old one-liner, and a reviewer timeout now returns Codex's timeout instructions — a missed deadline is not a risk verdict, so the model may retry once or ask the user — rather than the generic fail-closed text.
 
 

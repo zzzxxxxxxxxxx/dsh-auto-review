@@ -51,7 +51,7 @@ function promptConfig(overrides: Partial<ResolvedConfig> = {}): ResolvedConfig {
   return {
     enableByDefault: true,
     toolsPolicy: { default: 'human', overrides: {} },
-    images: { enabled: true, maxCount: 4, maxBytes: 8 * 1024 * 1024 },
+    images: { maxCount: 4, maxBytes: 8 * 1024 * 1024 },
     riskRules: [],
     reviewerProvider: 'fork',
     reviewerModel: undefined,
@@ -96,7 +96,7 @@ describe('reviewer prompt', () => {
     }, {
       enableByDefault: true,
       toolsPolicy: { default: 'human', overrides: {} },
-      images: { enabled: true, maxCount: 4, maxBytes: 8 * 1024 * 1024 },
+      images: { maxCount: 4, maxBytes: 8 * 1024 * 1024 },
       riskRules: [{ pattern: 'killall', regex: /killall/u, policy: 'never', field: 'reason' }],
       reviewerProvider: 'fork',
       reviewerModel: undefined,
@@ -149,7 +149,7 @@ describe('reviewer prompt', () => {
     }, {
       enableByDefault: true,
       toolsPolicy: { default: 'human', overrides: {} },
-      images: { enabled: true, maxCount: 4, maxBytes: 8 * 1024 * 1024 },
+      images: { maxCount: 4, maxBytes: 8 * 1024 * 1024 },
       riskRules: [],
       reviewerProvider: 'fork',
       reviewerModel: undefined,

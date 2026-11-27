@@ -17,9 +17,10 @@ export type ReviewImageBlock = Extract<ContentBlock, { type: 'image' }>
 
 /** Resolved reviewer image settings. */
 export interface ImagesConfig {
-  /** Whether attached images may be forwarded to the reviewer at all. */
-  readonly enabled: boolean
-  /** Hard cap on images per review; the oldest occurrences are dropped first. */
+  /**
+   * Hard cap on images per review; the oldest occurrences are dropped first.
+   * `0` disables image forwarding entirely (the reviewer then gets text only).
+   */
   readonly maxCount: number
   /** Hard cap on the summed encoded bytes of forwarded images. */
   readonly maxBytes: number
@@ -27,10 +28,39 @@ export interface ImagesConfig {
 
 /** Defaults mirroring the Codex guardian's transcript image caps. */
 export const DEFAULT_IMAGES: ImagesConfig = Object.freeze({
-  enabled: true,
   maxCount: 4,
   maxBytes: 8 * 1024 * 1024,
 })
+
+/**
+ * Reviewer routes that rejected image input at runtime. The host's catalog does
+ * not always disclose modalities (a model can accept images while the listing
+ * omits `inputModalities`), so the first failed attempt is what teaches the
+ * plugin that this route is text-only. Process-local: a restart re-probes.
+ */
+const textOnlyRoutes = new Set<string>()
+
+/**
+ * Record that one reviewer route cannot take image input.
+ * @param routeKey - the reviewer configuration identity (see `reviewRouteKey`).
+ */
+export function markRouteTextOnly(routeKey: string): void {
+  textOnlyRoutes.add(routeKey)
+}
+
+/**
+ * Whether one reviewer route is known to be text-only.
+ * @param routeKey - the reviewer configuration identity (see `reviewRouteKey`).
+ * @returns true when an earlier review on this route failed with images.
+ */
+export function isTextOnlyRoute(routeKey: string): boolean {
+  return textOnlyRoutes.has(routeKey)
+}
+
+/** Test seam: forget every learned route. */
+export function resetTextOnlyRoutes(): void {
+  textOnlyRoutes.clear()
+}
 
 /** The images selected for one review, plus what the caps discarded. */
 export interface SelectedReviewImages {
@@ -75,7 +105,7 @@ export function selectReviewImages(
   events: readonly SessionEvent[],
   config: ImagesConfig,
 ): SelectedReviewImages {
-  if (!config.enabled) return { blocks: [], dropped: 0 }
+  if (config.maxCount === 0) return { blocks: [], dropped: 0 }
   const picked: ReviewImageBlock[] = []
   const seen = new Set<string>()
   let bytes = 0

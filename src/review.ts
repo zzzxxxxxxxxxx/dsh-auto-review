@@ -22,7 +22,7 @@ import { assertObjectJsonSchema, type ObjectJsonSchema } from '@deepseek-ai/dsh-
 import type { AutoReviewFallback, PresentedCall, PresentedCallSource } from './events.ts'
 import { AutoReviewCircuitId, AutoReviewRejectionId, AutoReviewVerdictId, resolvePresentedCall } from './events.ts'
 import type { AuthorizationLevel, ContextBudgetConfig, ResolvedConfig, ReviewRiskLevel } from './config.ts'
-import { selectReviewImages } from './images.ts'
+import { isTextOnlyRoute, markRouteTextOnly, selectReviewImages } from './images.ts'
 import type { ReviewerChildren } from './isolation.ts'
 import { runPhocinaeReview, type PhocinaeEvidence } from './phocinae.ts'
 import {
@@ -533,6 +533,15 @@ export function buildReviewPrompt(
   ].join('\n')
 }
 
+/** Options that shape one reviewer request's content. */
+export interface ReviewContentOptions {
+  /**
+   * `false` forces text-only content, for a reviewer route that cannot accept
+   * image input (disclosed by the catalog or learned from an earlier failure).
+   */
+  readonly images?: boolean
+}
+
 /**
  * The reviewer's user-turn content: the text prompt plus, when enabled, the
  * conversation's user images as visual evidence.
@@ -554,9 +563,13 @@ export function buildReviewContent(
   config: ResolvedConfig,
   override?: OverrideContext,
   verdictChannel: 'structured_output' | 'text' = 'structured_output',
+  options: ReviewContentOptions = {},
 ): ContentBlock[] {
   const text = buildReviewPrompt(request, config, override, verdictChannel)
-  if (!config.images.enabled) return [{ type: 'text', text }]
+  // A route known (or learned) to be text-only gets the text prompt only: an
+  // image block on such a route fails the whole review, which the fail-closed
+  // fallback turns into a denial for every call.
+  if (options.images === false) return [{ type: 'text', text }]
   const selected = selectReviewImages(sessionEvents(request.agent.session), config.images)
   if (selected.blocks.length === 0) return [{ type: 'text', text }]
   const omitted = selected.dropped > 0 ? ` (${selected.dropped} more omitted by the image budget)` : ''
@@ -668,12 +681,52 @@ export function buildPhocinaeEvidence(
  * @param override - a pending human one-shot override, when one applies.
  * @returns the verdict or the failure.
  */
+/**
+ * Identity of the reviewer route a review will use, for the text-only memory.
+ * Composed from the configured reviewer knobs: the same knobs always select the
+ * same model, so a failure on one is knowledge about all of them.
+ * @param config - resolved config.
+ * @returns a stable key.
+ */
+function reviewRouteKey(config: ResolvedConfig): string {
+  return [config.reviewerBackend, config.reviewerProvider, config.reviewerModel ?? '', config.reviewerModelProvider ?? ''].join('\u0000')
+}
+
+/**
+ * Run one review, teaching the plugin when its reviewer route cannot take
+ * images: a text-only model rejects the whole request, which the fail-closed
+ * fallback would turn into a denial for every call, so the first failure
+ * retries once without images and remembers the route as text-only.
+ * @param ctx - the plugin context.
+ * @param config - resolved config.
+ * @param request - the pending approval request.
+ * @param reviewerSessions - the reviewer-child registry (anti-recursion).
+ * @param override - a pending human one-shot override, when one applies.
+ * @returns the review resolution.
+ */
 export async function runReview(
   ctx: Context,
   config: ResolvedConfig,
   request: ApprovalRequest,
   reviewerSessions: ReviewerChildren,
   override?: OverrideContext,
+): Promise<ReviewResolution> {
+  const routeKey = reviewRouteKey(config)
+  const withImages = config.images.maxCount > 0 && !isTextOnlyRoute(routeKey)
+  const first = await runReviewOnce(ctx, config, request, reviewerSessions, override, { images: withImages })
+  if (!withImages || !isReviewFailure(first)) return first
+  markRouteTextOnly(routeKey)
+  ctx.logger.warn('auto-review: the reviewer route rejected image input, so this review retried text-only and the route is now treated as text-only for this process')
+  return runReviewOnce(ctx, config, request, reviewerSessions, override, { images: false })
+}
+
+async function runReviewOnce(
+  ctx: Context,
+  config: ResolvedConfig,
+  request: ApprovalRequest,
+  reviewerSessions: ReviewerChildren,
+  override?: OverrideContext,
+  options: ReviewContentOptions = {},
 ): Promise<ReviewResolution> {
   // The local decision service needs neither `subagents` nor `llm`: it is a
   // plain HTTP call to a loopback process. Checked first so an offline or
@@ -695,7 +748,7 @@ export async function runReview(
   const seam = reviewerSubagentSeam(ctx)
   const activation = typeof seam.startActivation === 'function' && config.reviewerPreset !== undefined
   if (activation || typeof seam.start === 'function') {
-    return runReviewStructured(seam, config, request, reviewerSessions, activation, override)
+    return runReviewStructured(seam, config, request, reviewerSessions, activation, override, options)
   }
   const llm = ctx.get('llm')
   if (llm === undefined) {
@@ -704,7 +757,7 @@ export async function runReview(
       error: 'auto-review: the host offers neither a usable subagent seam nor llm, so the reviewer cannot run',
     }
   }
-  return runReviewInline(llm, config, request, override)
+  return runReviewInline(llm, config, request, override, options)
 }
 
 /** Agent options for the reviewer child/activation: model, LLM provider, and effort when configured. */
@@ -741,6 +794,7 @@ async function runReviewStructured(
   reviewerSessions: ReviewerChildren,
   activation: boolean,
   override?: OverrideContext,
+  options: ReviewContentOptions = {},
 ): Promise<ReviewResolution> {
   const provider = config.reviewerProvider
   const providerInfo = seam.getProvider(provider)
@@ -759,7 +813,7 @@ async function runReviewStructured(
   if (!activation && capabilities?.toolFilter === false) {
     return { fallback: 'unavailable', error: `subagent provider "${provider}" does not support toolFilter, which the read-only reviewer face requires` }
   }
-  const prompt: ContentBlock[] = buildReviewContent(request, config, override)
+  const prompt: ContentBlock[] = buildReviewContent(request, config, override, 'structured_output', options)
   const firstBlock = prompt[0]
   const promptText = firstBlock !== undefined && firstBlock.type === 'text' ? firstBlock.text : ''
   // Announced BEFORE the start call: the in-process driver wakes the child's
@@ -891,13 +945,14 @@ async function runReviewInline(
   config: ResolvedConfig,
   request: ApprovalRequest,
   override?: OverrideContext,
+  options: ReviewContentOptions = {},
 ): Promise<ReviewResolution> {
   const route = latestReviewerRoute(request.agent.session)
   if (route === undefined) {
     return { fallback: 'unavailable', error: 'auto-review: no request-header route is available for the reviewer' }
   }
   const model = config.reviewerModel ?? route.model
-  const promptContent: ContentBlock[] = buildReviewContent(request, config, override, 'text')
+  const promptContent: ContentBlock[] = buildReviewContent(request, config, override, 'text', options)
   const controller = new AbortController()
   let timedOut = false
   const timer = setTimeout(() => {

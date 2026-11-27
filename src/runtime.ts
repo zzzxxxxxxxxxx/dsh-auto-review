@@ -821,10 +821,10 @@ export class AutoReviewRuntime {
     if (lookup.outcome !== 'found' || lookup.call.callId !== String(request.callId)) return undefined
     // The reviewer's evidence includes the conversation's images, so the image
     // set is part of the request identity.
-    const images = this.config.images.enabled
-      ? selectReviewImages(sessionEvents(request.agent.session), this.config.images).blocks
+    const images = this.config.images.maxCount === 0
+      ? []
+      : selectReviewImages(sessionEvents(request.agent.session), this.config.images).blocks
         .map(block => String(block.attachment.attachmentId))
-      : []
     return fingerprint(request.toolName, lookup.call.argumentsText, images)
   }
 
