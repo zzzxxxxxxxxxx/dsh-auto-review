@@ -28,6 +28,10 @@ export interface AutoReviewDenyView {
   readonly reviewId: string
   readonly toolName: string
   readonly reason?: string
+  /** One-line preview of the denied call's arguments, when the host could resolve them. */
+  readonly argumentsPreview?: string
+  /** One-line description of the denied action, when the call carries one. */
+  readonly argumentsDescription?: string
 }
 
 /** The whole wire value folded by the `autoReview` projection unit. */

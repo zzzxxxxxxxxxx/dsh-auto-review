@@ -15,7 +15,7 @@ export const zh = {
   disable: '关闭',
   verdicts: '本回合 AI 裁决',
   failures: '本回合失败',
-  cacheHits: '缓存命中',
+  cacheHits: '裁决缓存命中',
   allTime: '累计',
   allows: '放行',
   denies: '拒绝',
@@ -40,6 +40,12 @@ export const zh = {
   riskLow: '低风险',
   riskMedium: '中风险',
   riskHigh: '高风险',
+  riskLevel: '危险级别：',
+  riskScore: '危险评分：',
+  authorization: '用户授权：',
+  commandLabel: '命令：',
+  fileLabel: '文件：',
+  descriptionLabel: '说明：',
   ms: 'ms',
 } satisfies Record<string, string>
 
@@ -57,7 +63,7 @@ export const en: Record<ReviewPanelLocaleKey, string> = {
   disable: 'Disable',
   verdicts: 'AI verdicts this turn',
   failures: 'Failures this turn',
-  cacheHits: 'Cache hits',
+  cacheHits: 'Verdict cache hits',
   allTime: 'All-time',
   allows: 'allows',
   denies: 'denies',
@@ -82,6 +88,12 @@ export const en: Record<ReviewPanelLocaleKey, string> = {
   riskLow: 'low risk',
   riskMedium: 'medium risk',
   riskHigh: 'high risk',
+  riskLevel: 'Risk level: ',
+  riskScore: 'Risk score: ',
+  authorization: 'Authorization: ',
+  commandLabel: 'Command: ',
+  fileLabel: 'File: ',
+  descriptionLabel: 'Description: ',
   ms: 'ms',
 }
 

@@ -22,6 +22,46 @@ import type { AutoReviewProjection } from '../projection-types.ts'
 import { presentVerdict } from './present.ts'
 import { NS } from './locales.ts'
 
+/** One denial action split for display; older verdicts stored the whole JSON blob on one line. */
+interface PreviewParts {
+  readonly command?: string
+  readonly file?: string
+  readonly description?: string
+}
+
+function unescapeJsonString(raw: string): string {
+  try {
+    return JSON.parse(`"${raw}"`) as string
+  } catch {
+    return raw
+  }
+}
+
+function previewParts(preview: string): PreviewParts {
+  if (!preview.startsWith('{')) return { command: preview }
+  let parsed: Record<string, unknown> | undefined
+  try {
+    parsed = JSON.parse(preview) as Record<string, unknown>
+  } catch {
+    parsed = undefined
+  }
+  const grab = (key: string, pattern: RegExp): string | undefined => {
+    const value = parsed?.[key]
+    if (typeof value === 'string') return value
+    const match = pattern.exec(preview)
+    return match === null ? undefined : unescapeJsonString(match[1] as string)
+  }
+  const command = grab('command', /"command"\s*:\s*"((?:[^"\\]|\\.)*)"/u)
+  const file = grab('file_path', /"file_path"\s*:\s*"((?:[^"\\]|\\.)*)"/u)
+  const description = grab('description', /"description"\s*:\s*"((?:[^"\\]|\\.)*)"/u)
+    ?? grab('justification', /"justification"\s*:\s*"((?:[^"\\]|\\.)*)"/u)
+  return {
+    ...command === undefined ? {} : { command },
+    ...file === undefined ? {} : { file },
+    ...description === undefined ? {} : { description },
+  }
+}
+
 /** Panel width in px; fixed so the position is known before the first paint. Keep in sync with `styles.ts`. */
 const PANEL_WIDTH = 360
 /** Vertical gap between the button and the panel. */
@@ -68,12 +108,18 @@ function verdictBadge(
     deny: t('decisionDeny'),
     fallback,
     escalation: t('escalationLabel'),
+    riskLevel: t('riskLevel'),
+    riskScore: t('riskScore'),
+    authorization: t('authorization'),
   }
   return value.recent.map(verdict => presentVerdict(verdict, labels)).map(row => (
     <div key={row.reviewId} data-dsh-auto-review-verdict>
-      <span data-dsh-auto-review-muted>{row.toolName}</span>
-      <span data-dsh-auto-review={`tone-${row.tone}`}>{row.label}</span>
-      <span data-dsh-auto-review-muted>{row.detail}</span>
+      <div data-dsh-auto-review-verdict-head>
+        <span data-dsh-auto-review-muted>{row.toolName}</span>
+        <span data-dsh-auto-review={`tone-${row.tone}`}>{row.label}</span>
+        {row.meta === '' ? null : <span data-dsh-auto-review-meta>{row.meta}</span>}
+      </div>
+      {row.detail === '' ? null : <div data-dsh-auto-review-detail>{row.detail}</div>}
     </div>
   ))
 }
@@ -192,8 +238,16 @@ export function ReviewPanel({ useProjection, approve, setEnabled, t }: ReviewPan
                 </div>
                 <div data-dsh-auto-review-row>
                   <span>{t('allTime')}</span>
-                  <span>
-                    {value.allows} {t('allows')} · {value.denies} {t('denies')} · {value.fallbacks} {t('fallbacks')} · {value.neverRejects} {t('neverRejects')} · {t('avg')} {value.avgDurationMs} {t('ms')}
+                  <span data-dsh-auto-review-stats>
+                    {[
+                      `${value.allows} ${t('allows')}`,
+                      `${value.denies} ${t('denies')}`,
+                      `${value.fallbacks} ${t('fallbacks')}`,
+                      `${value.neverRejects} ${t('neverRejects')}`,
+                      `${t('avg')} ${value.avgDurationMs} ${t('ms')}`,
+                    ].map(item => (
+                      <span key={item}>{item}</span>
+                    ))}
                   </span>
                 </div>
                 {value.circuit !== null && (
@@ -207,14 +261,37 @@ export function ReviewPanel({ useProjection, approve, setEnabled, t }: ReviewPan
                 {value.recentDenies.length > 0 && (
                   <div data-dsh-auto-review-section>
                     <div data-dsh-auto-review-title>{t('denyList')}</div>
-                    {value.recentDenies.map((deny, index) => (
-                      <div key={deny.reviewId} data-dsh-auto-review-row>
-                        <span data-dsh-auto-review-muted>{deny.toolName}</span>
-                        <button type="button" data-dsh-auto-review-approve onClick={() => void runApprove(index + 1)}>
-                          {t('approve')} #{index + 1}
-                        </button>
-                      </div>
-                    ))}
+                    {value.recentDenies.map((deny, index) => {
+                      const parts = deny.argumentsPreview === undefined ? undefined : previewParts(deny.argumentsPreview)
+                      const command = parts?.command
+                      const file = command === undefined ? parts?.file : undefined
+                      const description = parts?.description ?? deny.argumentsDescription
+                      const unparsed = command === undefined && file === undefined && description === undefined
+                        ? deny.argumentsPreview
+                        : undefined
+                      return (
+                        <div key={deny.reviewId} data-dsh-auto-review-row data-dsh-auto-review-deny-row>
+                          <span data-dsh-auto-review-deny-text>
+                            <span data-dsh-auto-review-muted>{deny.toolName}</span>
+                            {command === undefined ? null : (
+                              <span data-dsh-auto-review-deny-action>{t('commandLabel')}{command}</span>
+                            )}
+                            {file === undefined ? null : (
+                              <span data-dsh-auto-review-deny-action>{t('fileLabel')}{file}</span>
+                            )}
+                            {unparsed === undefined ? null : (
+                              <span data-dsh-auto-review-deny-action>{unparsed}</span>
+                            )}
+                            {description === undefined ? null : (
+                              <span data-dsh-auto-review-deny-action>{t('descriptionLabel')}{description}</span>
+                            )}
+                          </span>
+                          <button type="button" data-dsh-auto-review-approve onClick={() => void runApprove(index + 1)}>
+                            {t('approve')} #{index + 1}
+                          </button>
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
                 <div data-dsh-auto-review-section>

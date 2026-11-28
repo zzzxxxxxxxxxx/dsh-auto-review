@@ -15,6 +15,8 @@ export interface PresentedVerdict {
   readonly reviewId: string
   readonly toolName: string
   readonly label: string
+  /** Locale-labelled risk/authorization facts, e.g. `危险级别：low · 危险评分：8`. */
+  readonly meta: string
   readonly detail: string
   readonly tone: VerdictTone
 }
@@ -27,13 +29,25 @@ export function presentVerdict(
     readonly deny: string
     readonly fallback: (kind: string) => string
     readonly escalation: string
+    readonly riskLevel: string
+    readonly riskScore: string
+    readonly authorization: string
   },
 ): PresentedVerdict {
+  // Each fact carries its own label so the row explains itself: `危险级别：low
+  // · 危险评分：8 · 用户授权：medium`. Values stay raw enum spellings, which is
+  // what the operator tunes the policy against.
+  const parts: string[] = []
+  if (verdict.riskLevel !== undefined) parts.push(`${labels.riskLevel}${verdict.riskLevel}`)
+  if (verdict.riskScore !== undefined) parts.push(`${labels.riskScore}${String(verdict.riskScore)}`)
+  if (verdict.userAuthorization !== undefined) parts.push(`${labels.authorization}${verdict.userAuthorization}`)
+  const meta = parts.join(' · ')
   if (verdict.fallback !== undefined) {
     return {
       reviewId: verdict.reviewId,
       toolName: verdict.toolName,
       label: labels.fallback(verdict.fallback),
+      meta,
       detail: `${verdict.durationMs} ms`,
       tone: 'fallback',
     }
@@ -43,6 +57,7 @@ export function presentVerdict(
       reviewId: verdict.reviewId,
       toolName: verdict.toolName,
       label: labels.escalation,
+      meta,
       detail: verdict.reason ?? '',
       tone: 'escalation',
     }
@@ -52,15 +67,11 @@ export function presentVerdict(
   // A critical verdict settles as decision 'allow' + outcome 'rejected', so
   // the row follows the SETTLED outcome, not the reviewer's raw decision.
   const denied = verdict.decision === 'deny' || verdict.outcome === 'rejected'
-  const risk = verdict.riskLevel === undefined
-    ? ''
-    : ` · ${verdict.riskLevel}${verdict.riskScore === undefined ? '' : ` ${String(verdict.riskScore)}`}`
-  const authorization = verdict.userAuthorization === undefined ? '' : ` · auth ${verdict.userAuthorization}`
-  const label = `${denied ? labels.deny : labels.allow}${risk}${authorization}`
   return {
     reviewId: verdict.reviewId,
     toolName: verdict.toolName,
-    label,
+    label: denied ? labels.deny : labels.allow,
+    meta,
     detail: verdict.reason ?? `${verdict.durationMs} ms`,
     tone: denied ? 'deny' : 'allow',
   }

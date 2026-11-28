@@ -73,6 +73,27 @@ describe('auto-review answerer', () => {
     })
   })
 
+  it('carries a one-line arguments preview for the approve feed', async () => {
+    const harness = await auditHarness({ toolsPolicy: { overrides: { bash: 'ai' } } })
+    const append = harness.session.append as unknown as (type: string, data: unknown) => unknown
+    append.call(harness.session, 'tool/call', {
+      turn: 1,
+      step: 1,
+      callId: CallId('call-9'),
+      name: 'bash',
+      arguments: '{\n  "command": "ls -la /tmp",\n  "description": "List /tmp"\n}',
+    })
+    await dispatchAskedApproval(harness.ctx, harness.session, {
+      agent: harness.agent,
+      toolName: 'bash',
+      callId: CallId('call-9'),
+      reason: 'escalate',
+    }, next)
+    const verdict = lastEvent(harness.session.snapshotEvents(), 'autoReview/verdict')
+    expect(dataOf(verdict).argumentsPreview).toBe('ls -la /tmp')
+    expect(dataOf(verdict).argumentsDescription).toBe('List /tmp')
+  })
+
   // Regression for #83: a PTC approval carries `<outer>:ptc:<n>` while the
   // logged `tool/call` carries only `<outer>`, so the reviewer used to see no
   // arguments at all and deny every ai-routed escalation from a PTC session.

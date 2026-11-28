@@ -67,20 +67,81 @@ const CSS = `
 }
 [data-dsh-auto-review-row] {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
-  gap: 8px;
+  gap: 2px 8px;
   padding: 2px 0;
   align-items: baseline;
+}
+[data-dsh-auto-review-row] > span:not([data-dsh-auto-review-deny-text]) {
+  white-space: nowrap;
+}
+[data-dsh-auto-review-stats] {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 2px 8px;
+}
+[data-dsh-auto-review-stats] > span {
+  white-space: nowrap;
+}
+[data-dsh-auto-review-deny-row] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--ar-border);
+}
+[data-dsh-auto-review-deny-row]:last-child {
+  border-bottom: none;
+}
+[data-dsh-auto-review-deny-row] > button {
+  justify-self: end;
+  align-self: start;
+}
+[data-dsh-auto-review-deny-text] {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  white-space: normal;
+}
+[data-dsh-auto-review-deny-text] > span:first-child {
+  white-space: nowrap;
+}
+[data-dsh-auto-review-deny-action] {
+  color: var(--ar-muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 [data-dsh-auto-review-muted] {
   color: var(--ar-muted);
 }
 [data-dsh-auto-review-verdict] {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 3px 0;
+  padding: 4px 0;
   border-bottom: 1px dashed var(--ar-border);
+}
+[data-dsh-auto-review-verdict-head] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+}
+[data-dsh-auto-review-verdict-head] > span {
+  white-space: nowrap;
+}
+[data-dsh-auto-review-meta] {
+  color: var(--ar-muted);
+}
+[data-dsh-auto-review-detail] {
+  margin-top: 2px;
+  color: var(--ar-muted);
 }
 [data-dsh-auto-review-tone-allow] { color: var(--ar-allow); }
 [data-dsh-auto-review-tone-deny] { color: var(--ar-deny); }

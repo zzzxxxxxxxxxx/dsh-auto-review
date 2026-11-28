@@ -38,6 +38,8 @@ const DENY_VIEW_SCHEMA = z.object({
   reviewId: z.string(),
   toolName: z.string(),
   reason: z.string().optional(),
+  argumentsPreview: z.string().optional(),
+  argumentsDescription: z.string().optional(),
 })
 
 const CIRCUIT_VIEW_SCHEMA = z.object({
@@ -128,6 +130,8 @@ function denyView(data: SessionEventMap['autoReview/verdict']): AutoReviewDenyVi
     toolName: data.toolName,
   }
   if (data.reason !== undefined) view.reason = data.reason
+  if (data.argumentsPreview !== undefined) view.argumentsPreview = data.argumentsPreview
+  if (data.argumentsDescription !== undefined) view.argumentsDescription = data.argumentsDescription
   return view
 }
 

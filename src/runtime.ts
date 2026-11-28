@@ -109,6 +109,10 @@ interface MemoryVerdict {
   readonly denial: boolean
   /** The action's tool+arguments hash, when the presented call was resolvable. */
   readonly argumentsHash?: string
+  /** One-line arguments preview for the approve feed, when resolvable. */
+  readonly argumentsPreview?: string
+  /** One-line description/justification for the approve feed, when resolvable. */
+  readonly argumentsDescription?: string
   /** When the verdict settled (epoch ms), for the panel's degraded view. */
   readonly at: number
   /** Reviewer duration, for the panel's degraded view. */
@@ -120,6 +124,8 @@ interface MemoryDenial {
   readonly id: string
   readonly toolName: string
   readonly argumentsHash?: string
+  readonly argumentsPreview?: string
+  readonly argumentsDescription?: string
 }
 
 /** One in-memory single-use human override (consumed by the next same-tool review). */
@@ -540,6 +546,8 @@ export class AutoReviewRuntime {
         id: verdict.id,
         toolName: verdict.toolName,
         ...verdict.argumentsHash !== undefined ? { argumentsHash: verdict.argumentsHash } : {},
+        ...verdict.argumentsPreview !== undefined ? { argumentsPreview: verdict.argumentsPreview } : {},
+        ...verdict.argumentsDescription !== undefined ? { argumentsDescription: verdict.argumentsDescription } : {},
       })
       if (memory.denies.length > MEMORY_DENIES_CAP) memory.denies.length = MEMORY_DENIES_CAP
     }
@@ -552,7 +560,12 @@ export class AutoReviewRuntime {
     tally.recent.unshift({ id: verdict.id, toolName: verdict.toolName, denial: verdict.denial, at: verdict.at, durationMs: verdict.durationMs })
     if (tally.recent.length > MEMORY_RECENT_CAP) tally.recent.length = MEMORY_RECENT_CAP
     if (verdict.denial) {
-      tally.recentDenies.unshift({ id: verdict.id, toolName: verdict.toolName })
+      tally.recentDenies.unshift({
+        id: verdict.id,
+        toolName: verdict.toolName,
+        ...verdict.argumentsPreview !== undefined ? { argumentsPreview: verdict.argumentsPreview } : {},
+        ...verdict.argumentsDescription !== undefined ? { argumentsDescription: verdict.argumentsDescription } : {},
+      })
       if (tally.recentDenies.length > MEMORY_DENIES_CAP) tally.recentDenies.length = MEMORY_DENIES_CAP
     }
   }
@@ -684,6 +697,8 @@ export class AutoReviewRuntime {
       recentDenies: tally.recentDenies.map(deny => ({
         reviewId: String(deny.id),
         toolName: deny.toolName,
+        ...deny.argumentsPreview !== undefined ? { argumentsPreview: deny.argumentsPreview } : {},
+        ...deny.argumentsDescription !== undefined ? { argumentsDescription: deny.argumentsDescription } : {},
       })),
     }
   }
@@ -905,6 +920,39 @@ export class AutoReviewRuntime {
     return lookup.outcome === 'found' ? fingerprint(request.toolName, lookup.call.argumentsText) : undefined
   }
 
+  /** One-line, redacted arguments preview for the approve feed, when resolvable. */
+  private argumentsPreviewFor(request: ApprovalRequest): string | undefined {
+    if (request.callId === undefined) return undefined
+    const text = sanitizedArgumentsText(sessionEvents(request.agent.session), request.callId)
+    if (text === undefined) return undefined
+    let preview = text
+    try {
+      const parsed = JSON.parse(text) as Record<string, unknown>
+      if (typeof parsed.command === 'string') preview = parsed.command
+      else if (typeof parsed.file_path === 'string') preview = parsed.file_path
+    } catch {
+      // Keep the sanitized JSON text when it is not an object we understand.
+    }
+    return truncate(redactInlineSecrets(preview).replace(/\s+/gu, ' ').trim(), 120)
+  }
+
+  /** One-line description/justification of the denied action, for the approve feed. */
+  private argumentsDescriptionFor(request: ApprovalRequest): string | undefined {
+    if (request.callId === undefined) return undefined
+    const text = sanitizedArgumentsText(sessionEvents(request.agent.session), request.callId)
+    if (text === undefined) return undefined
+    try {
+      const parsed = JSON.parse(text) as Record<string, unknown>
+      const description = typeof parsed.description === 'string'
+        ? parsed.description
+        : typeof parsed.justification === 'string' ? parsed.justification : undefined
+      if (description === undefined) return undefined
+      return truncate(redactInlineSecrets(description).replace(/\s+/gu, ' ').trim(), 120)
+    } catch {
+      return undefined
+    }
+  }
+
   /**
    * Run the reviewer for one claimed request, register the child for
    * anti-recursion, apply the risk policy, record the verdict, trip the
@@ -1008,6 +1056,8 @@ export class AutoReviewRuntime {
       }
     }
     const argumentsHash = this.argumentsHashFor(request)
+    const argumentsPreview = this.argumentsPreviewFor(request)
+    const argumentsDescription = this.argumentsDescriptionFor(request)
     const canAppend = this.auditMayAppend()
     if (canAppend) {
       const result = this.appendAuditRecord(request.agent.session, 'verdict', {
@@ -1016,6 +1066,8 @@ export class AutoReviewRuntime {
         toolName: request.toolName,
         ...request.callId !== undefined ? { callId: request.callId } : {},
         ...argumentsHash !== undefined ? { argumentsHash } : {},
+        ...argumentsPreview !== undefined ? { argumentsPreview } : {},
+        ...argumentsDescription !== undefined ? { argumentsDescription } : {},
         provider: this.reviewerProviderName(),
         ...resolution.model !== undefined ? { model: resolution.model } : {},
         ...resolution.reviewerSessionId !== undefined ? { reviewerSessionId: resolution.reviewerSessionId } : {},
@@ -1037,6 +1089,8 @@ export class AutoReviewRuntime {
         toolName: request.toolName,
         denial: resolution.decision === 'deny' || outcome === 'rejected',
         ...argumentsHash !== undefined ? { argumentsHash } : {},
+        ...argumentsPreview !== undefined ? { argumentsPreview } : {},
+        ...argumentsDescription !== undefined ? { argumentsDescription } : {},
         at: Date.now(),
         durationMs,
       })

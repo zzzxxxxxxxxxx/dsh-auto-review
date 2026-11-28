@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.15.6] - 2026-11-28
 
 ### Added
 
@@ -25,6 +25,8 @@
 
 ### Fixed
 
+- **The review panel labels its facts and no longer wraps them mid-value.** The all-time row and the verdict rows were flex rows with no `white-space` guard, so “累计” and values like `low 8 · auth medium` broke across lines inside the 360px panel. Rows now wrap only between nowrap facts, the all-time stats render as individual chips, and verdict rows show labelled facts (`危险级别：low · 危险评分：8 · 用户授权：medium`) on their own line above the reason.
+- **The approve feed identifies a denial by its action, not just the tool name.** Verdicts now carry a one-line, redacted arguments preview, the projection exposes it on `recentDenies`, and the panel renders it as labelled `命令：`/`文件：`/`说明：` lines (two-line clamp) inside dashed rows — so “批准重试 #2” is attached to a visible `bash "ls -la /tmp"`-style action instead of an indistinguishable `edit`.
 - **Critical verdicts are rejected everywhere the plugin reports them.** The settlement already ran as a denial, but the panel row, the process tally and the in-memory mirror used the reviewer's raw `decision` (`allow`), so a critical refusal was displayed and counted as an allow on audit-degraded hosts. Both the panel renderer and the mirror now treat `outcome: 'rejected'` as a denial.
 - **Untrusted text can no longer fabricate an authorization line.** The reviewer's rubric is line-anchored (`[user]` at the start of a line), but tool output, assistant messages, the approval reason and the pending arguments were interpolated with their newlines intact. Every untrusted prompt fragment is now folded onto one physical line (backslashes escaped first) and the rubric names `[agent]`/`[tool ...]` content as evidence, never authorization; image-only user messages no longer render as an empty `[user]` line.
 - **`riskLevel` and `riskScore` are required verdict fields.** The structured-output schema required only `decision`/`reason`/`riskScore`, the parser accepted a missing `riskLevel`/`riskScore`, and the settlement then defaulted the level to `low` and the score to zero — silently skipping the authorization floor, the critical auto-deny and the score ceiling. The schema and `parseVerdict` now reject either omission (fail-closed schema fallback).
@@ -35,7 +37,7 @@
 - **The invariant accepts a critical rejection and sees live audit events.** The deny-marker check now accepts any `outcome: 'rejected'` verdict, and the live `session/event` hook normalizes `plugin:dsh-auto-review/*` types before matching (the initial sweep already did).
 - `/auto-review approvefoo` no longer matches `approve` by prefix; the command requires the verb as the first token.
 
- the reviewer had seen.** The fingerprint was `tool + arguments` only, so the same command repeated after the user attached a different screenshot — or no screenshot — replayed the earlier verdict (`cached: true`) even though the reviewer's evidence, including the authorization an image can carry, had changed. The selected image ids now participate in the digest (order-insensitive, deduplicated).
+- **The verdict cache ignored the images the reviewer had seen.** The fingerprint was `tool + arguments` only, so the same command repeated after the user attached a different screenshot — or no screenshot — replayed the earlier verdict (`cached: true`) even though the reviewer's evidence, including the authorization an image can carry, had changed. The selected image ids now participate in the digest (order-insensitive, deduplicated).
 
 
 - **A `critical` allow ran the tool.** The table marked `critical` as rejected, but the settlement only re-checked `decision === 'deny'` and the risk-policy override, so a `{"decision":"allow","riskLevel":"critical"}` verdict fell through to `allowed-once` — the call executed, the audit recorded `rejected`, and the rejection circuit never counted it. A critical verdict is now a denial on its own, regardless of `onHighRisk`.

@@ -7,7 +7,7 @@
 
 # dsh-auto-review
 
-Current version `0.15.5`.
+Current version `0.15.6`.
 
 **Let a second model decide on the approval chain — humans approve nothing, and nothing unsafe slips through.**
 

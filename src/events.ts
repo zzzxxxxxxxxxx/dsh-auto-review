@@ -44,6 +44,10 @@ declare module '@deepseek-ai/dsh-session/types' {
       callId?: CallId
       /** Hash of the presented call's tool+arguments, so an override binds to the action, not just the tool. */
       argumentsHash?: string
+      /** One-line, redacted arguments preview so the approve feed identifies the action. */
+      argumentsPreview?: string
+      /** One-line, redacted description of the action, when the call carries one. */
+      argumentsDescription?: string
       provider: string
       model?: string
       reviewerSessionId?: SessionId
