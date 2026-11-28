@@ -17,6 +17,7 @@
 
 import type { Context, Inject } from '@deepseek-ai/cordis'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
+import { auditEventTypeOf } from './audit.ts'
 import { sessionEvents } from './session-events.ts'
 import { readToolResult, toolResultText } from './session-message.ts'
 import { AUTO_REVIEW_FALLBACKS, CIRCUIT_MARKER_PATTERN, DENY_MARKER_PATTERN, FALLBACK_MARKER_PATTERN, NEVER_MARKER_PATTERN } from './events.ts'
@@ -303,7 +304,9 @@ const install: InvariantInstaller = Object.assign((ctx: Context, fail: Invariant
           fail(`tool/result deny marker references unknown reviewId ${JSON.stringify(reviewId)}`)
           return
         }
-        if (verdict.decision !== 'deny' && !(verdict.escalation === 'risk-policy' && verdict.outcome === 'rejected')) {
+        // Any settled rejection counts: a deny, a risk-policy override, and a
+        // critical verdict (decision 'allow' + outcome 'rejected').
+        if (verdict.decision !== 'deny' && verdict.outcome !== 'rejected') {
           fail(`tool/result deny marker references a non-deny verdict ${JSON.stringify(reviewId)}`)
         }
         if (verdict.callId !== undefined && verdict.callId !== callId) {
@@ -374,8 +377,11 @@ const install: InvariantInstaller = Object.assign((ctx: Context, fail: Invariant
   }
   ctx.on('internal/dispatch', (_mode, eventName, args) => {
     if (eventName !== 'session/event') return
-    const [session, event] = args as [Session, SessionEvent]
-    validateEvent(session, event)
+    const [session, raw] = args as [Session, SessionEvent]
+    // Live dispatch carries the RAW log type; plugin-owned records use
+    // `plugin:dsh-auto-review/*`. Normalize before matching, like the sweep.
+    const type = auditEventTypeOf(raw.type)
+    validateEvent(session, type === raw.type ? raw : { ...raw, type } as unknown as SessionEvent)
   }, { global: true })
 }, { inject: ['sessions'] })
 /* jscpd:ignore-end */

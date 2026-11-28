@@ -154,7 +154,7 @@ export function makeSubagents(
       await new Promise<void>(resolve => setTimeout(resolve, behavior.delayMs))
     }
     return behavior.verdict !== undefined
-      ? { structured: behavior.verdict, stopReason: 'completed' }
+      ? { structured: completeVerdict(behavior.verdict as unknown as Record<string, unknown>), stopReason: 'completed' }
       : { structured: undefined, stopReason: behavior.stopReason ?? 'completed' }
   })()
   const service: MockSubagents = {
@@ -233,13 +233,24 @@ export function makeLlm(script: () => ScriptedReview): MockLlm {
       }
       if (behavior.llmNoFinish === true) return
       const text = behavior.llmText
-        ?? JSON.stringify(behavior.verdict ?? { decision: 'allow', reason: 'looks safe' })
+        ?? JSON.stringify(completeVerdict(behavior.verdict as unknown as Record<string, unknown> | undefined) ?? { decision: 'allow', reason: 'looks safe', riskLevel: 'low', riskScore: 10 })
       yield { type: 'block-start', index: 0, blockType: 'text' } as StreamChunk
       yield { type: 'text-delta', index: 0, text } as StreamChunk
       yield { type: 'block-end', index: 0, block: { type: 'text', text } } as StreamChunk
       yield { type: 'finish', reason: finishReasonOf(behavior) } as StreamChunk
     },
   }
+}
+
+/**
+ * A scripted reviewer answer is always a complete verdict: fill the fields the
+ * parser now requires (riskLevel, riskScore) unless the script overrides them,
+ * so a behavior-only fixture does not fail the schema gate.
+ * @param verdict - the scripted structured verdict, possibly partial.
+ * @returns the verdict with the schema's required fields present.
+ */
+function completeVerdict(verdict: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+  return verdict === undefined ? undefined : { riskLevel: 'low', riskScore: 10, ...verdict }
 }
 
 /** Map the script's `llmFinish` onto a real {@link FinishReason}. */

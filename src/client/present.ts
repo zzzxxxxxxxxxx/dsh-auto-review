@@ -49,16 +49,19 @@ export function presentVerdict(
   }
   // Risk and authorization are what separates "denied because dangerous" from
   // "denied because unconfirmed"; the row used to read identically for both.
+  // A critical verdict settles as decision 'allow' + outcome 'rejected', so
+  // the row follows the SETTLED outcome, not the reviewer's raw decision.
+  const denied = verdict.decision === 'deny' || verdict.outcome === 'rejected'
   const risk = verdict.riskLevel === undefined
     ? ''
     : ` · ${verdict.riskLevel}${verdict.riskScore === undefined ? '' : ` ${String(verdict.riskScore)}`}`
   const authorization = verdict.userAuthorization === undefined ? '' : ` · auth ${verdict.userAuthorization}`
-  const label = `${verdict.decision === 'deny' ? labels.deny : labels.allow}${risk}${authorization}`
+  const label = `${denied ? labels.deny : labels.allow}${risk}${authorization}`
   return {
     reviewId: verdict.reviewId,
     toolName: verdict.toolName,
     label,
     detail: verdict.reason ?? `${verdict.durationMs} ms`,
-    tone: verdict.decision === 'deny' ? 'deny' : 'allow',
+    tone: denied ? 'deny' : 'allow',
   }
 }

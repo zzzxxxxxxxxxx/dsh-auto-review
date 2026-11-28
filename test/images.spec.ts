@@ -67,6 +67,16 @@ describe('reviewer image selection', () => {
     })
   })
 
+  it('limits selection to the transcript window (last N turns)', () => {
+    const events = [
+      imageEvent('old', 1000),
+      { type: 'turn/start', data: { turn: 2 } },
+      imageEvent('new', 1000),
+    ] as unknown as SessionEvent[]
+    expect(selectReviewImages(events, DEFAULT_IMAGES).blocks.map(block => block.attachment.attachmentId)).toEqual(['old', 'new'])
+    expect(selectReviewImages(events, DEFAULT_IMAGES, 1).blocks.map(block => block.attachment.attachmentId)).toEqual(['new'])
+  })
+
   it('ignores events that cannot carry user images', () => {
     const events = [
       {
@@ -134,5 +144,14 @@ describe('text-only route memory', () => {
     expect(isTextOnlyRoute('k')).toBe(true)
     resetTextOnlyRoutes()
     expect(isTextOnlyRoute('k')).toBe(false)
+  })
+
+  it('forgets a text-only route after its TTL instead of for the process lifetime', async () => {
+    const { TEXT_ONLY_ROUTE_TTL_MS, isTextOnlyRoute, markRouteTextOnly, resetTextOnlyRoutes } = await import('../src/images.ts')
+    resetTextOnlyRoutes()
+    markRouteTextOnly('k', 1_000)
+    expect(isTextOnlyRoute('k', 1_000 + TEXT_ONLY_ROUTE_TTL_MS - 1)).toBe(true)
+    expect(isTextOnlyRoute('k', 1_000 + TEXT_ONLY_ROUTE_TTL_MS)).toBe(false)
+    resetTextOnlyRoutes()
   })
 })

@@ -69,7 +69,7 @@ describe('request-local structured receipts', () => {
   it.each(['allow', 'deny'] as const)('records %s with public association onto the audit event', async decision => {
     const harness = await mountHarness(ai, () => ({ verdict: { decision, reason: 'evidence' } }))
     const answer = await harness.ctx.autoReviewRuntime.answerDetailed(requestFor(harness), allow)
-    expect(receiptOf(answer)).toMatchObject({ sessionId: 'harness-session', approvalId: 'asked-one', callId: 'one', category: 'review', decision, reason: 'evidence', configuredReviewerBackend: 'mock', cached: false })
+    expect(receiptOf(answer)).toMatchObject({ sessionId: 'harness-session', approvalId: 'asked-one', callId: 'one', category: 'review', decision, reason: 'evidence', configuredReviewerBackend: 'agent', cached: false })
     expect(answer.outcome).toBe(decision === 'allow' ? 'allowed-once' : 'rejected')
     // The audit event is now written on every supported host, so the receipt's
     // public association must survive onto it — not be skipped to stay clean.

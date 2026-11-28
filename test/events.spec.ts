@@ -264,6 +264,17 @@ describe('override folds', () => {
     expect(activeOverride(session.snapshotEvents(), 'write', 60_000, overrideEvent.time + 1)).toBeUndefined()
   })
 
+  it('binds an override to the action hash when both sides carry one', () => {
+    const session = sessionWith(
+      { type: 'autoReview/override', data: { reviewId: 'r1', toolName: 'bash', argumentsHash: 'h1' } },
+      { type: 'autoReview/verdict', data: { reviewId: 'r2', approvalId: 'a2', toolName: 'bash', provider: 'fork', durationMs: 1, decision: 'allow', reason: 'ok', argumentsHash: 'h2' } },
+    )
+    const verdictEvent = session.snapshotEvents().find(event => auditEventTypeOf(event.type) === 'autoReview/verdict')!
+    // The verdict reviewed different arguments, so it does not consume the override.
+    expect(activeOverride(session.snapshotEvents(), 'bash', 60_000, verdictEvent.time + 1, 'h1')).toBe('r1')
+    expect(activeOverride(session.snapshotEvents(), 'bash', 60_000, verdictEvent.time + 1, 'h2')).toBeUndefined()
+  })
+
   it('is consumed by the next same-tool verdict', () => {
     const session = sessionWith(
       { type: 'autoReview/override', data: { reviewId: 'r1', toolName: 'bash' } },

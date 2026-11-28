@@ -146,6 +146,38 @@ describe('audit-disabled degradation (rc.6 host)', () => {
     const overrideText = overrideStart.request.prompt.map(block => block.type === 'text' ? block.text : '').join('')
     expect(overrideText).toContain('HUMAN OVERRIDE')
   })
+
+  it('counts a critical rejection as a denial in the degraded mirror', async () => {
+    const harness = await mountHarness(
+      { toolsPolicy: { overrides: { bash: 'ai' } } },
+      () => ({ verdict: { decision: 'allow', reason: 'critical risk', riskLevel: 'critical' } }),
+    )
+    const { outcome } = await dispatchAskedApproval(harness.ctx, harness.session, { agent: harness.agent, toolName: 'bash' }, next)
+    expect(outcome).toBe('rejected')
+    const status = invoke(harness.commands.registered[0], harness, 'status')
+    expect((status as { text: string }).text).toContain('0 allows, 1 denies')
+  })
+
+  it('does not treat approvefoo as an approve verb', async () => {
+    const harness = await mountHarness({ toolsPolicy: { overrides: { bash: 'ai' } } }, denyScript)
+    await dispatchAskedApproval(harness.ctx, harness.session, { agent: harness.agent, toolName: 'bash' }, next)
+    const result = invoke(harness.commands.registered[0], harness, 'approvefoo')
+    expect((result as { text: string }).text).toContain('Unknown /auto-review argument "approvefoo"')
+    // A typo must not consume the denial: the real approve still finds it.
+    const approve = invoke(harness.commands.registered[0], harness, 'approve')
+    expect((approve as { text: string }).text).toContain('Authorized ONE retry')
+  })
+
+  it('keeps /auto-review off across a turn boundary in the degraded mirror', async () => {
+    const harness = await mountHarness({ toolsPolicy: { overrides: { bash: 'ai' } } })
+    invoke(harness.commands.registered[0], harness, 'off')
+    const append = harness.session.append as unknown as (type: string, data: unknown) => unknown
+    append.call(harness.session, 'turn/start', { turn: 1 })
+    append.call(harness.session, 'turn/end', { turn: 1, reason: { kind: 'completed' } })
+    append.call(harness.session, 'turn/start', { turn: 2 })
+    const status = invoke(harness.commands.registered[0], harness, 'status')
+    expect((status as { text: string }).text).toContain('Auto-review is OFF')
+  })
 })
 
 describe('fail-closed audit for unresolvable versions', () => {

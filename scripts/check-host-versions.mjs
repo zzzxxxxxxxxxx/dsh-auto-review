@@ -1,7 +1,7 @@
 /**
  * Host-version watch for the pre-release pins. The peers pin
  * `@deepseek-ai/dsh-*` to the lines they are built against — an exact
- * `0.1.x-rc.N` / `0.1.x-alpha.N`, a `>=0.1.x-rc.N <0.2.0` range, or a `||`
+ * `0.2.x-rc.N` / `0.2.x-alpha.N`, a `>=0.2.x-rc.N <0.3.0` range, or a `||`
  * union of such segments (the dual-line peers express the rc floor and the
  * alpha floor in one range). When the umbrella `@deepseek-ai/dsh` publishes a
  * newer rc line (on any dist-tag), this script fails so the bump happens
@@ -11,19 +11,24 @@
  * registry alpha also fails the check (bump the pins, or document a
  * deliberate stay-behind).
  *
+ * Prerelease comparators only admit a prerelease when the comparator shares
+ * its `major.minor.patch` tuple (npm's prerelease rule), so a `>=0.2.2-0`
+ * range never covers `0.2.3-alpha.2`: the patch component participates in
+ * coverage and is compared alongside the minor.
+ *
  * Network failure is not a failure here: an offline machine must not block
  * the gate, it only skips the check.
  */
 
 import { readFile } from 'node:fs/promises'
 
-const EXACT_PIN = /^0\.1\.(\d+)-(rc|alpha)\.(\d+)$/u
-const RANGE_SEGMENT = /^>=0\.1\.(\d+)-(rc|alpha)\.(\d+) <0\.2\.0$/u
-// The family canonical tuple idiom `>=0.1.<minor>-0 <0.2.0`: the `-0` lower bound
-// admits EVERY prerelease of that minor (semver admits a prerelease only into a
-// comparator set whose own tuple carries a prerelease), so it covers that minor's
-// alpha line at the lowest rank.
-const TUPLE_SEGMENT = /^>=0\.1\.(\d+)-0 <0\.2\.0$/u
+const EXACT_PIN = /^0\.(\d+)\.(\d+)-(rc|alpha)\.(\d+)$/u
+const RANGE_SEGMENT = /^>=0\.(\d+)\.(\d+)-(rc|alpha)\.(\d+) <0\.\d+\.0$/u
+// The family canonical tuple idiom `>=0.<minor>.<patch>-0 <0.<next>.0`: the `-0`
+// lower bound admits every prerelease of that exact `major.minor.patch` tuple
+// (semver admits a prerelease only into a comparator set whose own tuple carries
+// a prerelease), so it covers that line's alpha floor at the lowest rank.
+const TUPLE_SEGMENT = /^>=0\.(\d+)\.(\d+)-0 <0\.\d+\.0(?:-0)?$/u
 // semver prerelease precedence within one 0.1.x line: alpha < rc.
 const RANK = { alpha: 0, rc: 1 }
 
@@ -35,15 +40,15 @@ const RANK = { alpha: 0, rc: 1 }
 function parseBound(text) {
   const exact = EXACT_PIN.exec(text)
   if (exact !== null) {
-    return { minor: Number(exact[1]), rank: exact[2], n: Number(exact[3]), exact: true }
+    return { minor: Number(exact[1]), patch: Number(exact[2]), rank: exact[3], n: Number(exact[4]), exact: true }
   }
   const range = RANGE_SEGMENT.exec(text)
   if (range !== null) {
-    return { minor: Number(range[1]), rank: range[2], n: Number(range[3]), exact: false }
+    return { minor: Number(range[1]), patch: Number(range[2]), rank: range[3], n: Number(range[4]), exact: false }
   }
   const tuple = TUPLE_SEGMENT.exec(text)
   if (tuple !== null) {
-    return { minor: Number(tuple[1]), rank: 'alpha', n: 0, exact: false }
+    return { minor: Number(tuple[1]), patch: Number(tuple[2]), rank: 'alpha', n: 0, exact: false }
   }
   return null
 }
@@ -79,15 +84,15 @@ function collectPins(deps) {
 
 /** Render one bound as a version-ish label for diagnostics. */
 function label(bound) {
-  return `0.1.${bound.minor}-${bound.rank}.${bound.n}`
+  return `0.${bound.minor}.${bound.patch}-${bound.rank}.${bound.n}`
 }
 
 /**
  * Whether a peer bound admits `target` under npm's prerelease-tuple rule: a
- * `>=lower <0.2.0` range admits a prerelease only when a comparator shares
- * its `0.1.<minor>` tuple, so a lower minor never covers a prerelease of a
- * higher minor (the range still admits every plain release of a higher
- * minor, which is why an alpha segment must be added for an alpha line).
+ * `>=lower <0.<next>.0` range admits a prerelease only when a comparator
+ * shares its `major.minor.patch` tuple, so neither a lower minor nor a lower
+ * patch covers a prerelease (the range still admits plain releases of higher
+ * versions, which is why an alpha segment must be added for an alpha line).
  * An exact pin admits only itself.
  * @param bound - one parsed peer bound.
  * @param target - the registry line to cover.
@@ -95,9 +100,10 @@ function label(bound) {
  */
 function peerCovers(bound, target) {
   if (bound.exact) {
-    return bound.minor === target.minor && bound.rank === target.rank && bound.n === target.n
+    return bound.minor === target.minor && bound.patch === target.patch
+      && bound.rank === target.rank && bound.n === target.n
   }
-  return bound.minor === target.minor
+  return bound.minor === target.minor && bound.patch === target.patch
     && (RANK[bound.rank] < RANK[target.rank]
       || (bound.rank === target.rank && bound.n <= target.n))
 }
@@ -112,8 +118,10 @@ function peerCovers(bound, target) {
 function devCovers(bound, target) {
   return bound.minor > target.minor
     || (bound.minor === target.minor
-      && (RANK[bound.rank] > RANK[target.rank]
-        || (bound.rank === target.rank && bound.n >= target.n)))
+      && (bound.patch > target.patch
+        || (bound.patch === target.patch
+          && (RANK[bound.rank] > RANK[target.rank]
+            || (bound.rank === target.rank && bound.n >= target.n)))))
 }
 
 const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
@@ -145,7 +153,7 @@ const published = Object.values(tags)
   .map(tag => parseBound(String(tag)))
   .filter(bound => bound !== null)
 
-// Newest published rc line among the dist-tags (both 0.1.0-rc.N and 0.1.1-rc.N lines).
+// Newest published rc line among the dist-tags (0.2.x-rc.N lines).
 const newestRc = published
   .filter(bound => bound.rank === 'rc')
   .sort((left, right) => (left.minor - right.minor) || (left.n - right.n))

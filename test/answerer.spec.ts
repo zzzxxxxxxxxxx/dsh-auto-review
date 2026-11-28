@@ -331,6 +331,50 @@ describe('auto-review answerer', () => {
     expect(verdict?.data).not.toHaveProperty('outcome')
   })
 
+  it('does not retry a failed review when the request carried no image', async () => {
+    const harness = await auditHarness(
+      { toolsPolicy: { overrides: { bash: 'ai' } } },
+      () => ({ failStart: new Error('image input is not supported') }),
+    )
+    const { outcome } = await dispatchAskedApproval(harness.ctx, harness.session, {
+      agent: harness.agent,
+      toolName: 'bash',
+    }, next)
+    expect(outcome).toBe('rejected')
+    expect(harness.subagents.starts).toHaveLength(1)
+  })
+
+  it('retries once without images only when an image-bearing request fails with an image error', async () => {
+    let calls = 0
+    const harness = await auditHarness(
+      { toolsPolicy: { overrides: { bash: 'ai' } } },
+      () => {
+        calls += 1
+        return calls === 1
+          ? { failStart: new Error('this model does not support image input') }
+          : { verdict: { decision: 'allow', reason: 'read-only', riskLevel: 'low' } }
+      },
+    )
+    const append = harness.session.append as unknown as (type: string, data: unknown, options?: { surfaceOp: 'append' }) => unknown
+    append.call(harness.session, 'user/message', {
+      source: { kind: 'user' },
+      content: [
+        { type: 'text', text: 'please look at the screenshot' },
+        { type: 'image', attachment: { attachmentId: 'img-1', mediaType: 'image/png', bytes: 1000, width: 8, height: 8 } },
+      ],
+    }, { surfaceOp: 'append' })
+    const { outcome } = await dispatchAskedApproval(harness.ctx, harness.session, {
+      agent: harness.agent,
+      toolName: 'bash',
+    }, next)
+    expect(outcome).toBe('allowed-once')
+    expect(harness.subagents.starts).toHaveLength(2)
+    const first = harness.subagents.starts[0]!.request.prompt
+    const second = harness.subagents.starts[1]!.request.prompt
+    expect(first.some(block => block.type === 'image')).toBe(true)
+    expect(second.some(block => block.type === 'image')).toBe(false)
+  })
+
   it('grants on reviewer failure only with fallbackPolicy allow-once', async () => {
     const harness = await auditHarness(
       { toolsPolicy: { overrides: { bash: 'ai' } }, fallbackPolicy: 'allow-once' },

@@ -42,6 +42,8 @@ declare module '@deepseek-ai/dsh-session/types' {
       approvalId: ApprovalRequestId
       toolName: string
       callId?: CallId
+      /** Hash of the presented call's tool+arguments, so an override binds to the action, not just the tool. */
+      argumentsHash?: string
       provider: string
       model?: string
       reviewerSessionId?: SessionId
@@ -90,6 +92,8 @@ declare module '@deepseek-ai/dsh-session/types' {
     'autoReview/override': {
       reviewId: AutoReviewVerdictId
       toolName: string
+      /** The denied action's tool+arguments hash; absent on legacy overrides (tool-wide). */
+      argumentsHash?: string
     }
     /**
      * A deterministic hard-disable rejection (`never` policy): a risk rule or
@@ -482,6 +486,8 @@ export interface RecentDeny {
   readonly toolName: string
   readonly reason?: string
   readonly riskLevel?: ReviewRiskLevel
+  /** The denied action's tool+arguments hash, when the host could resolve the call. */
+  readonly argumentsHash?: string
 }
 
 /**
@@ -502,6 +508,7 @@ export function lastDeniedVerdicts(events: readonly SessionEvent[], limit: numbe
       toolName: data.toolName,
       ...data.reason !== undefined ? { reason: data.reason } : {},
       ...data.riskLevel !== undefined ? { riskLevel: data.riskLevel } : {},
+      ...data.argumentsHash !== undefined ? { argumentsHash: data.argumentsHash } : {},
     })
   }
   return result
@@ -516,6 +523,7 @@ export function lastDeniedVerdicts(events: readonly SessionEvent[], limit: numbe
  * @param toolName - the tool an approval request is about.
  * @param ttlMs - the override lifetime.
  * @param now - the current epoch milliseconds.
+ * @param argumentsHash - the pending call's tool+arguments hash, when resolvable.
  * @returns the overridden deny verdict's id, or undefined without a pending override.
  */
 export function activeOverride(
@@ -523,11 +531,19 @@ export function activeOverride(
   toolName: string,
   ttlMs: number,
   now: number,
+  argumentsHash?: string,
 ): AutoReviewVerdictId | undefined {
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index] as SessionEvent
-    if (event.type === 'autoReview/verdict' && event.data.toolName === toolName) return undefined
+    if (event.type === 'autoReview/verdict' && event.data.toolName === toolName) {
+      // A same-tool verdict consumes the override only when it is for the same
+      // action. Whichever side lacks a hash keeps the legacy tool-wide match.
+      if (argumentsHash === undefined || event.data.argumentsHash === undefined || event.data.argumentsHash === argumentsHash) return undefined
+      continue
+    }
     if (event.type === 'autoReview/override' && event.data.toolName === toolName) {
+      const overrideHash = event.data.argumentsHash
+      if (argumentsHash !== undefined && overrideHash !== undefined && overrideHash !== argumentsHash) continue
       return now - event.time <= ttlMs ? event.data.reviewId : undefined
     }
   }

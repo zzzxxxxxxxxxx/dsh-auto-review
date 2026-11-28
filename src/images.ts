@@ -37,24 +37,38 @@ export const DEFAULT_IMAGES: ImagesConfig = Object.freeze({
  * not always disclose modalities (a model can accept images while the listing
  * omits `inputModalities`), so the first failed attempt is what teaches the
  * plugin that this route is text-only. Process-local: a restart re-probes.
+ *
+ * The entry expires: a rate limit, a provider outage or an unrelated transient
+ * failure must not permanently strip the user's images (which are authorization
+ * evidence) from every later review on this route.
  */
-const textOnlyRoutes = new Set<string>()
+export const TEXT_ONLY_ROUTE_TTL_MS = 10 * 60_000
+const textOnlyRoutes = new Map<string, number>()
 
 /**
  * Record that one reviewer route cannot take image input.
  * @param routeKey - the reviewer configuration identity (see `reviewRouteKey`).
+ * @param now - the current epoch milliseconds (tests pin it).
  */
-export function markRouteTextOnly(routeKey: string): void {
-  textOnlyRoutes.add(routeKey)
+export function markRouteTextOnly(routeKey: string, now: number = Date.now()): void {
+  textOnlyRoutes.set(routeKey, now + TEXT_ONLY_ROUTE_TTL_MS)
 }
 
 /**
  * Whether one reviewer route is known to be text-only.
  * @param routeKey - the reviewer configuration identity (see `reviewRouteKey`).
- * @returns true when an earlier review on this route failed with images.
+ * @param now - the current epoch milliseconds (tests pin it).
+ * @returns true when an earlier review on this route failed with images and the
+ *   learned limitation has not expired.
  */
-export function isTextOnlyRoute(routeKey: string): boolean {
-  return textOnlyRoutes.has(routeKey)
+export function isTextOnlyRoute(routeKey: string, now: number = Date.now()): boolean {
+  const expiresAt = textOnlyRoutes.get(routeKey)
+  if (expiresAt === undefined) return false
+  if (expiresAt <= now) {
+    textOnlyRoutes.delete(routeKey)
+    return false
+  }
+  return true
 }
 
 /** Test seam: forget every learned route. */
@@ -99,18 +113,30 @@ function imageBlocksOf(event: SessionEvent): readonly ReviewImageBlock[] {
  * chronological order, which is the order the model reads.
  * @param events - the requesting session's durable events, in order.
  * @param config - the resolved image caps.
+ * @param maxTurns - only images from the last N turns (the transcript window);
+ *   0 or a non-finite value means every turn. An image from fifty turns ago is
+ *   not part of "this conversation" as the reviewer sees it and must not be
+ *   weighed as authorization for the pending call.
  * @returns the selected blocks and the number of dropped occurrences.
  */
 export function selectReviewImages(
   events: readonly SessionEvent[],
   config: ImagesConfig,
+  maxTurns = 0,
 ): SelectedReviewImages {
   if (config.maxCount === 0) return { blocks: [], dropped: 0 }
+  const limit = Number.isFinite(maxTurns) && maxTurns > 0 ? maxTurns : Number.POSITIVE_INFINITY
   const picked: ReviewImageBlock[] = []
   const seen = new Set<string>()
   let bytes = 0
   let dropped = 0
+  let turnsSeen = 0
   for (const event of [...events].reverse()) {
+    if (event.type === 'turn/start') {
+      turnsSeen += 1
+      if (turnsSeen >= limit) break
+      continue
+    }
     for (const block of [...imageBlocksOf(event)].reverse()) {
       const attachmentId = String(block.attachment.attachmentId)
       if (seen.has(attachmentId)) continue

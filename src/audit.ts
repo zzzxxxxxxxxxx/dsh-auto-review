@@ -190,6 +190,56 @@ export function loadAppendPluginRecord(): AppendPluginRecord | null {
 const appendersBySessionClass = new Map<unknown, AppendPluginRecord | null>()
 
 /**
+ * Raised when no resolvable module owns the session's class. Only this means
+ * "the host cannot write plugin records"; an attempted write that was refused
+ * is a different, possibly transient, failure.
+ */
+export class AuditUnavailableError extends Error {
+  constructor() {
+    super('auto-review: no resolvable @deepseek-ai/dsh-session owns this Session class')
+    this.name = 'AuditUnavailableError'
+  }
+}
+
+/**
+ * Resolve the appender owned by the module that defined the session's class,
+ * without appending. Cached per class; `null` is pinned only after every
+ * candidate loaded and none matched, so a write failure can never be mistaken
+ * for "no owner".
+ * @param session - the session whose class selects the owning module.
+ * @returns the appender, or null when no candidate owns this class.
+ */
+export function resolveAppendPluginRecord(session: unknown): AppendPluginRecord | null {
+  const ctor = Object.getPrototypeOf(session as object)?.constructor
+  if (appendersBySessionClass.has(ctor)) return appendersBySessionClass.get(ctor) ?? null
+  const candidates: string[] = []
+  const entry = process.argv[1]
+  if (entry !== undefined) {
+    try {
+      candidates.push(realpathSync(entry))
+    } catch {
+      // A virtual argv[1] (eval, test runner) yields no host candidate.
+    }
+  }
+  candidates.push(import.meta.url)
+  for (const candidate of candidates) {
+    let mod: { appendPluginRecord?: unknown; Session?: unknown }
+    try {
+      mod = createRequire(candidate)('@deepseek-ai/dsh-session') as { appendPluginRecord?: unknown; Session?: unknown }
+    } catch {
+      continue
+    }
+    if (typeof mod.appendPluginRecord !== 'function') continue
+    if (mod.Session !== ctor) continue
+    const append = mod.appendPluginRecord as AppendPluginRecord
+    appendersBySessionClass.set(ctor, append)
+    return append
+  }
+  appendersBySessionClass.set(ctor, null)
+  return null
+}
+
+/**
  * Append one plugin record through the module that OWNS the session's class.
  *
  * `appendPluginRecord` is `session.#appendRecord(...)` under the hood (the
@@ -207,41 +257,9 @@ const appendersBySessionClass = new Map<unknown, AppendPluginRecord | null>()
  * @throws when no resolvable module owns this session class.
  */
 export function appendPluginRecordFor(session: unknown, type: string, data: unknown): unknown {
-  const ctor = Object.getPrototypeOf(session as object)?.constructor
-  if (appendersBySessionClass.has(ctor)) {
-    const pinned = appendersBySessionClass.get(ctor)
-    if (pinned === null || pinned === undefined) {
-      throw new Error('auto-review: no resolvable @deepseek-ai/dsh-session owns this Session class')
-    }
-    return pinned(session, type, data)
-  }
-  const candidates: string[] = []
-  const entry = process.argv[1]
-  if (entry !== undefined) {
-    try {
-      candidates.push(realpathSync(entry))
-    } catch {
-      // A virtual argv[1] (eval, test runner) yields no host candidate.
-    }
-  }
-  candidates.push(import.meta.url)
-  for (const candidate of candidates) {
-    try {
-      const mod = createRequire(candidate)('@deepseek-ai/dsh-session') as {
-        appendPluginRecord?: unknown
-        Session?: unknown
-      }
-      if (typeof mod.appendPluginRecord !== 'function') continue
-      if (mod.Session !== ctor) continue
-      const append = mod.appendPluginRecord as AppendPluginRecord
-      appendersBySessionClass.set(ctor, append)
-      return append(session, type, data)
-    } catch {
-      // Not resolvable, or it threw before the class comparison; try the next.
-    }
-  }
-  appendersBySessionClass.set(ctor, null)
-  throw new Error('auto-review: no resolvable @deepseek-ai/dsh-session owns this Session class')
+  const append = resolveAppendPluginRecord(session)
+  if (append === null) throw new AuditUnavailableError()
+  return append(session, type, data)
 }
 
 /**

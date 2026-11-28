@@ -238,7 +238,7 @@ describe('tool-less reviewer on a host without a child seam', () => {
 
   it('reads the verdict out of a fenced answer with surrounding prose', async () => {
     const harness = await mountInline(() => ({
-      llmText: 'Sure — here is my decision:\n```json\n{"decision":"allow","reason":"read-only ls","riskLevel":"low"}\n```',
+      llmText: 'Sure — here is my decision:\n```json\n{"decision":"allow","reason":"read-only ls","riskLevel":"low","riskScore":5}\n```',
     }))
     const { outcome } = await dispatchAskedApproval(harness.ctx, harness.session, {
       agent: harness.agent,

@@ -18,7 +18,7 @@ describe('auto-review runtime context', () => {
     expect(text).not.toContain('approvals_reviewer')
     expect(text).toContain('`bash`, `edit`')
     expect(text).toContain('materially safer')
-    expect(text.split('\n')).toHaveLength(3)
+    expect(text.split('\n')).toHaveLength(4)
   })
 
   it('says any tool when the default policy is ai', () => {
