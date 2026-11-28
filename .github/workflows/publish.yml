@@ -56,6 +56,9 @@ jobs:
             echo "tag ${GITHUB_REF_NAME} does not match package version ${tag}"
             exit 1
           fi
+      - name: Pack the release tarball
+        run: pnpm pack
+
       # prepublishOnly re-runs the full gate on the fresh checkout. Trusted
       # publishing: the OIDC token (id-token: write above) replaces NPM_TOKEN, so
       # the empty-token guard is gone on purpose - with the secret retired it would
@@ -70,6 +73,7 @@ jobs:
           if [ -f .npmrc ]; then echo "--- workspace .npmrc ---"; cat .npmrc; else echo "no workspace .npmrc"; fi
           if [ -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]; then echo "OIDC request TOKEN: present"; else echo "OIDC request TOKEN: MISSING"; fi
       - name: Publish to npm
+        if: github.repository == 'PerryLink/dsh-auto-review'
         shell: bash
         env:
           # npm/pnpm's OIDC exchange never throws: a failure is only visible at
@@ -99,6 +103,7 @@ jobs:
       # Advisory only: npm's read side can lag minutes behind a successful publish, and a hard
       # failure here skipped the GitHub Release (observed on dsh-cert-mcp v0.2.1).
       - name: Verify the version is live on the registry (advisory)
+        if: github.repository == 'PerryLink/dsh-auto-review'
         shell: bash
         run: |
           version="$(node -p "require('./package.json').version")"
@@ -116,3 +121,5 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
+          files: dsh-auto-review-*.tgz
+          fail_on_unmatched_files: true
